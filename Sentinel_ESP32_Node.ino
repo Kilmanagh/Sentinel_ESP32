@@ -1,37 +1,36 @@
 /*
  * ============================================================================
- *  SENTINEL FIRMWARE v2.0
- *  ESP32 Multi-Sensor Environmental & Security Monitor
+ * SENTINEL FIRMWARE v2.0
+ * ESP32 Multi-Sensor Environmental & Security Monitor
  * ============================================================================
  *
- *  Features:
- *    - LAN-only networking (no cloud dependencies)
- *    - MAC-based unique device identity
- *    - MQTT with Home Assistant auto-discovery
- *    - BME280 environmental sensors (temperature °F, humidity, pressure)
- *    - Comfort Index (composite thermal comfort score)
- *    - Indoor Air Quality (IAQ) Score
- *    - PIR motion detection
- *    - Sound-level intrusion detection
- *    - BLE device scanning & presence tracking
- *    - Door/window reed switch sensor (GPIO 32)
- *    - Onboard diagnostics (uptime, heap, WiFi RSSI, reconnect counts)
+ * Features:
+ * - LAN-only networking (no cloud dependencies)
+ * - MAC-based unique device identity
+ * - MQTT with Home Assistant auto-discovery
+ * - BME280 environmental sensors (temperature °F, humidity, pressure)
+ * - Comfort Index (composite thermal comfort score)
+ * - Indoor Air Quality (IAQ) Score
+ * - PIR motion detection
+ * - Sound-level intrusion detection
+ * - BLE device scanning & presence tracking
+ * - Door/window reed switch sensor (GPIO 32)
+ * - Onboard diagnostics (uptime, heap, WiFi RSSI, reconnect counts)
  *
- *  Hardware:
- *    - ESP32 DevKit or equivalent
- *    - BME280 via I2C (SDA=21, SCL=22)
- *    - PIR sensor on GPIO 27
- *    - Analog sound sensor on GPIO 34
- *    - Door reed switch on GPIO 32 (NO, pulled HIGH = CLOSED)
- *    - Optional onboard LED on GPIO 2
+ * Hardware:
+ * - ESP32 DevKit or equivalent
+ * - BME280 via I2C (SDA=21, SCL=22)
+ * - PIR sensor on GPIO 27 (AM312)
+ * - Analog sound sensor on GPIO 34 (MAX9814)
+ * - Door reed switch on GPIO 32 (MC-38 NC, pulled HIGH = OPEN)
  *
- *  Libraries required (install via Arduino Library Manager):
- *    - WiFi (built-in)
- *    - PubSubClient by Nick O'Leary
- *    - Adafruit BME280 Library
- *    - Adafruit Unified Sensor
- *    - ArduinoJson by Benoit Blanchon (v6+)
- *    - BLE (built-in ESP32 BLE Arduino)
+ * Libraries required (install via Arduino Library Manager):
+ * - WiFi (built-in)
+ * - PubSubClient by Nick O'Leary
+ * - Adafruit BME280 Library
+ * - Adafruit Unified Sensor
+ * - ArduinoJson by Benoit Blanchon (v6+)
+ * - BLE (built-in ESP32 BLE Arduino)
  *
  * ============================================================================
  */
@@ -57,8 +56,8 @@ const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 // MQTT broker (local network)
 const char* MQTT_SERVER   = "192.168.1.100";
 const int   MQTT_PORT     = 1883;
-const char* MQTT_USER     = "";          // leave blank if no auth
-const char* MQTT_PASS     = "";          // leave blank if no auth
+const char* MQTT_USER     = "";         // leave blank if no auth
+const char* MQTT_PASS     = "";         // leave blank if no auth
 
 // ============================================================================
 //  PIN DEFINITIONS
@@ -66,20 +65,20 @@ const char* MQTT_PASS     = "";          // leave blank if no auth
 
 #define PIN_PIR           27
 #define PIN_SOUND         34    // analog input
-#define PIN_DOOR          32    // reed switch (pulled HIGH internally)
+#define PIN_DOOR          32    // reed switch (NC, pulled HIGH internally)
 #define PIN_LED           2     // onboard status LED
 #define BME_SDA           21
 #define BME_SCL           22
 
 // ============================================================================
-//  TIMING INTERVALS (milliseconds)
+//  TIMING INTERVALS & THRESHOLDS (milliseconds)
 // ============================================================================
 
 #define INTERVAL_ENV        30000   // environmental readings every 30s
 #define INTERVAL_DIAG       60000   // diagnostics every 60s
 #define INTERVAL_BLE        120000  // BLE scan every 2 minutes
 #define SOUND_SAMPLE_WINDOW 100     // sound sampling window (ms)
-#define SOUND_THRESHOLD     2000    // sound intrusion trigger level (ADC)
+#define SOUND_THRESHOLD     1500    // Calibrated for MAX9814
 #define PIR_COOLDOWN        10000   // motion re-trigger cooldown (ms)
 #define DOOR_DEBOUNCE       50      // door switch debounce (ms)
 
@@ -90,13 +89,12 @@ const char* MQTT_PASS     = "";          // leave blank if no auth
 WiFiClient   espClient;
 PubSubClient mqttClient(espClient);
 Adafruit_BME280 bme;
-BLEScan*     pBLEScan = nullptr;
+BLEScan* pBLEScan = nullptr;
 
 // MAC-based identity
 String deviceMAC;
 String deviceID;
 String deviceName;
-
 // MQTT topic base
 String topicBase;
 
@@ -108,7 +106,8 @@ unsigned long lastMotionPub  = 0;
 
 // Sensor state
 bool     bmeAvailable       = false;
-bool     lastDoorState      = HIGH;   // HIGH = CLOSED (pull-up)
+bool     lastDoorState      = HIGH;
+// HIGH = CLOSED (pull-up) for NO switch; logic flipped for NC in publishDoorState
 bool     currentDoorState   = HIGH;
 unsigned long lastDoorChange = 0;
 bool     motionDetected     = false;
@@ -172,21 +171,18 @@ void setup() {
   setupBLE();
 
   bootTime = millis();
-
   // Connect MQTT and publish auto-discovery
   reconnectMQTT();
   if (mqttClient.connected()) {
     publishAutoDiscovery();
-
     // Publish initial door state at boot
     currentDoorState = digitalRead(PIN_DOOR);
     lastDoorState = currentDoorState;
     publishDoorState(currentDoorState);
-    Serial.printf("[DOOR] Boot state: %s\n", currentDoorState == HIGH ? "CLOSED" : "OPEN");
+    Serial.printf("[DOOR] Boot state: %s\n", currentDoorState == LOW ? "CLOSED" : "OPEN");
 
     // Publish initial environment reading
     readAndPublishEnvironment();
-
     // Publish initial diagnostics
     publishDiagnostics();
   }
@@ -210,7 +206,6 @@ void loop() {
   mqttClient.loop();
 
   unsigned long now = millis();
-
   // Environmental readings (BME280 + Comfort + IAQ)
   if (now - lastEnvRead >= INTERVAL_ENV) {
     lastEnvRead = now;
@@ -248,7 +243,6 @@ void loop() {
 void setupIdentity() {
   uint8_t mac[6];
   WiFi.macAddress(mac);
-
   char macStr[18];
   snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -337,7 +331,6 @@ void reconnectMQTT() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   String willTopic = topicBase + "/status";
-
   Serial.print(F("[MQTT] Connecting to broker... "));
 
   bool connected = false;
@@ -441,7 +434,6 @@ void publishAutoDiscovery() {
 
   for (int i = 0; i < entityCount; i++) {
     DiscoveryEntity& e = entities[i];
-
     String configTopic = String("homeassistant/") + e.component + "/" +
                          deviceID + "/" + e.objectSuffix + "/config";
 
@@ -476,7 +468,7 @@ void publishAutoDiscovery() {
     serializeJson(doc, payload, sizeof(payload));
     mqttClient.publish(configTopic.c_str(), payload, true);
 
-    delay(50);  // throttle to avoid overwhelming broker
+    delay(50); // throttle to avoid overwhelming broker
   }
 
   Serial.printf("[DISCOVERY] Published %d entities\n", entityCount);
@@ -488,7 +480,6 @@ void publishAutoDiscovery() {
 
 void setupBME280() {
   Wire.begin(BME_SDA, BME_SCL);
-
   if (bme.begin(0x76)) {
     bmeAvailable = true;
     Serial.println(F("[BME280] Sensor found at 0x76"));
@@ -632,7 +623,6 @@ void setupPIR() {
 void checkMotion() {
   int pirState = digitalRead(PIN_PIR);
   unsigned long now = millis();
-
   if (pirState == HIGH && !motionDetected) {
     if (now - lastMotionPub >= PIR_COOLDOWN) {
       motionDetected = true;
@@ -712,7 +702,7 @@ void setupDoor() {
   lastDoorState = currentDoorState;
   lastDoorChange = millis();
   Serial.printf("[DOOR] Reed switch initialized on GPIO %d — state: %s\n",
-                PIN_DOOR, currentDoorState == HIGH ? "CLOSED" : "OPEN");
+                PIN_DOOR, currentDoorState == LOW ? "CLOSED" : "OPEN");
 }
 
 void checkDoor() {
@@ -737,9 +727,8 @@ void checkDoor() {
 }
 
 void publishDoorState(bool state) {
-  // HIGH (pull-up active, magnet near) = CLOSED
-  // LOW  (pull-up broken, magnet away)  = OPEN
-  const char* doorStr = (state == HIGH) ? "CLOSED" : "OPEN";
+  // NC LOGIC: LOW (circuit closed) = CLOSED, HIGH (circuit open) = OPEN
+  const char* doorStr = (state == LOW) ? "CLOSED" : "OPEN";
 
   StaticJsonDocument<96> doc;
   doc["state"]     = doorStr;
@@ -790,7 +779,6 @@ void runBLEScan() {
 
   SentinelBLECallbacks callbacks;
   pBLEScan->setAdvertisedDeviceCallbacks(&callbacks, false);
-
   BLEScanResults results = pBLEScan->start(10, false);  // 10-second scan
   pBLEScan->clearResults();
 
