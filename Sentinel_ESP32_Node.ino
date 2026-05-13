@@ -55,20 +55,25 @@ void setup() {
 
 void loop() {
   const uint32_t now = millis();
-  const uint16_t raw = analogRead(kSensorPin);
-  const float voltage = rawToVoltage(raw);
+  const bool sampleDue = intervalElapsed(now, lastSampleMs, kSampleIntervalMs);
+  const bool heartbeatDue = intervalElapsed(now, lastHeartbeatMs, kHeartbeatIntervalMs);
 
-  if (intervalElapsed(now, lastSampleMs, kSampleIntervalMs)) {
-    lastSampleMs = now;
-    publishTelemetry(raw, voltage);
-  }
+  if (sampleDue || heartbeatDue) {
+    const uint16_t raw = analogRead(kSensorPin);
+    const float voltage = rawToVoltage(raw);
 
-  if (intervalElapsed(now, lastHeartbeatMs, kHeartbeatIntervalMs)) {
-    lastHeartbeatMs = now;
-    Serial.print("Heartbeat: ");
-    Serial.print(kNodeId);
-    Serial.print(" | sensor_voltage=");
-    Serial.println(voltage, 3);
+    if (sampleDue) {
+      lastSampleMs = now;
+      publishTelemetry(raw, voltage);
+    }
+
+    if (heartbeatDue) {
+      lastHeartbeatMs = now;
+      Serial.print("Heartbeat: ");
+      Serial.print(kNodeId);
+      Serial.print(" | sensor_voltage=");
+      Serial.println(voltage, 3);
+    }
   }
 
   delay(10);
