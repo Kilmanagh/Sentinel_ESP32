@@ -1,0 +1,68 @@
+#include <Arduino.h>
+
+namespace {
+constexpr char kNodeId[] = "sentinel-node-01";
+constexpr uint8_t kStatusLedPin = 2;
+constexpr uint8_t kSensorPin = 34;
+constexpr uint32_t kSampleIntervalMs = 2000;
+constexpr uint32_t kHeartbeatIntervalMs = 30000;
+constexpr float kAdcReferenceVoltage = 3.3F;
+constexpr uint16_t kAdcMax = 4095;
+constexpr uint16_t kAlertThreshold = 2800;
+
+uint32_t lastSampleMs = 0;
+uint32_t lastHeartbeatMs = 0;
+}
+
+static float readSensorVoltage() {
+  const uint16_t raw = analogRead(kSensorPin);
+  return (static_cast<float>(raw) * kAdcReferenceVoltage) / static_cast<float>(kAdcMax);
+}
+
+static void publishTelemetry() {
+  const uint16_t raw = analogRead(kSensorPin);
+  const float voltage = (static_cast<float>(raw) * kAdcReferenceVoltage) / static_cast<float>(kAdcMax);
+  const bool alert = raw >= kAlertThreshold;
+
+  digitalWrite(kStatusLedPin, alert ? HIGH : LOW);
+
+  Serial.print("{\"node_id\":\"");
+  Serial.print(kNodeId);
+  Serial.print("\",\"sensor_raw\":");
+  Serial.print(raw);
+  Serial.print(",\"sensor_voltage\":");
+  Serial.print(voltage, 3);
+  Serial.print(",\"alert\":");
+  Serial.print(alert ? "true" : "false");
+  Serial.println("}");
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(kStatusLedPin, OUTPUT);
+  pinMode(kSensorPin, INPUT);
+  analogReadResolution(12);
+
+  Serial.println("Sentinel ESP32 node booting...");
+  Serial.print("Node ID: ");
+  Serial.println(kNodeId);
+}
+
+void loop() {
+  const uint32_t now = millis();
+
+  if ((now - lastSampleMs) >= kSampleIntervalMs) {
+    lastSampleMs = now;
+    publishTelemetry();
+  }
+
+  if ((now - lastHeartbeatMs) >= kHeartbeatIntervalMs) {
+    lastHeartbeatMs = now;
+    Serial.print("Heartbeat: ");
+    Serial.print(kNodeId);
+    Serial.print(" | sensor_voltage=");
+    Serial.println(readSensorVoltage(), 3);
+  }
+
+  delay(10);
+}
