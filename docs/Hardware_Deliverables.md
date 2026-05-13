@@ -13,25 +13,23 @@ This document outlines the specific hardware components and wiring configuration
 ## Hardware Configuration & Pin Mapping
 The firmware is configured to use a unified 3.3V power rail for all sensors, driven by the ESP32 regulated output.
 
-| Component | ESP32 GPIO | Firmware Variable | Electrical Logic |
-| :--- | :--- | :--- | :--- |
-| **BME280 SDA** | 21 | `BME_SDA` | I2C Data |
-| **BME280 SCL** | 22 | `BME_SCL` | I2C Clock |
-| **AM312 PIR** | 27 | `PIN_PIR` | Digital Input (HIGH = Motion) |
-| **MC-38 Reed** | 32 | `PIN_DOOR` | Input Pull-up (LOW = Closed / HIGH = Open) |
-| **MAX9814 Out** | 34 | `PIN_SOUND` | Analog Input (ADC 0-4095) |
-| **Onboard LED** | 2 | `PIN_LED` | Digital Output (Status Blinks) |
+| Hardware Component | Component Pin | ESP32 GPIO | Firmware Variable | Pin Type |
+| :--- | :--- | :--- | :--- | :--- |
+| **BME280 Sensor** | SDA | **GPIO 21** | `BME_SDA` | I2C Data |
+| **BME280 Sensor** | SCL | **GPIO 22** | `BME_SCL` | I2C Clock |
+| **AM312 PIR** | Out | **GPIO 27** | `PIN_PIR` | Digital Input |
+| **MC-38 Reed Switch (NC)**| Signal | **GPIO 32** | `PIN_DOOR` | Digital Input (Internal Pull-up) |
+| **MAX9814 Microphone** | Out | **GPIO 34** | `PIN_SOUND` | Analog Input |
+| **Status LED** | Onboard | **GPIO 2** | `PIN_LED` | Digital Output |
 
-## Firmware Logic Adjustment (Normally Closed)
-The MC-38 (Normally Closed) means that when the magnet is near the sensor (door closed), the circuit is **completed**. 
-- **Wiring**: Connect one wire to GPIO 32 and the other to Ground (GND).
-- **Logic**: With `INPUT_PULLUP` enabled in the code:
-    - **Door Closed**: Magnet present -> Switch closed -> GPIO 32 pulled to GND (**LOW**).
-    - **Door Open**: Magnet removed -> Switch open -> GPIO 32 pulled to VCC (**HIGH**).
+## Wiring Connection Notes
+- **Power Supply**: Connect all sensors to the **3.3V** rail and **GND**.
+- **Normally Closed (NC) Reed Switch**: Connect one wire of the MC-38 to **GPIO 32** and the other to **GND**. The internal pull-up resistor is enabled in the code (`INPUT_PULLUP`) to handle the logic where **LOW** (magnet present) represents **CLOSED**.
+- **Analog Input**: GPIO 34 is an input-only pin on the ESP32, dedicated to the MAX9814 analog signal.
 
 ## Design & Fabrication Assets
 - **Schematic Notes**: Detailed in `hardware/schematics/`.
 - **PCB Layout**: Source files and notes in `hardware/pcb/`.
 - **Manufacturing Files**: Gerber stack-up files are located in `hardware/pcb/gerbers/`.
 
-*Note: The `SOUND_THRESHOLD` in `Sentinel_ESP32_Node.ino` (currently set to 2000) should be calibrated based on the specific gain settings of the MAX9814 module.*
+*Note: The `SOUND_THRESHOLD` in the firmware (currently set to 1500) should be calibrated based on the specific environment and gain settings of the MAX9814 module.*
