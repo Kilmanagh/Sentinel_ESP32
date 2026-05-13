@@ -22,14 +22,7 @@ static bool intervalElapsed(const uint32_t now, const uint32_t since, const uint
   return static_cast<uint32_t>(now - since) >= intervalMs;
 }
 
-static float readSensorVoltage() {
-  const uint16_t raw = analogRead(kSensorPin);
-  return rawToVoltage(raw);
-}
-
-static void publishTelemetry() {
-  const uint16_t raw = analogRead(kSensorPin);
-  const float voltage = rawToVoltage(raw);
+static void publishTelemetry(const uint16_t raw, const float voltage) {
   const bool alert = raw >= kAlertThreshold;
 
   digitalWrite(kStatusLedPin, alert ? HIGH : LOW);
@@ -54,14 +47,20 @@ void setup() {
   Serial.println("Sentinel ESP32 node booting...");
   Serial.print("Node ID: ");
   Serial.println(kNodeId);
+
+  const uint32_t now = millis();
+  lastSampleMs = now;
+  lastHeartbeatMs = now;
 }
 
 void loop() {
   const uint32_t now = millis();
+  const uint16_t raw = analogRead(kSensorPin);
+  const float voltage = rawToVoltage(raw);
 
   if (intervalElapsed(now, lastSampleMs, kSampleIntervalMs)) {
     lastSampleMs = now;
-    publishTelemetry();
+    publishTelemetry(raw, voltage);
   }
 
   if (intervalElapsed(now, lastHeartbeatMs, kHeartbeatIntervalMs)) {
@@ -69,7 +68,7 @@ void loop() {
     Serial.print("Heartbeat: ");
     Serial.print(kNodeId);
     Serial.print(" | sensor_voltage=");
-    Serial.println(readSensorVoltage(), 3);
+    Serial.println(voltage, 3);
   }
 
   delay(10);
