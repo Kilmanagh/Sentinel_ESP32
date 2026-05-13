@@ -14,14 +14,22 @@ uint32_t lastSampleMs = 0;
 uint32_t lastHeartbeatMs = 0;
 }
 
+static float rawToVoltage(const uint16_t raw) {
+  return (static_cast<float>(raw) * kAdcReferenceVoltage) / static_cast<float>(kAdcMax);
+}
+
+static bool intervalElapsed(const uint32_t now, const uint32_t since, const uint32_t intervalMs) {
+  return static_cast<uint32_t>(now - since) >= intervalMs;
+}
+
 static float readSensorVoltage() {
   const uint16_t raw = analogRead(kSensorPin);
-  return (static_cast<float>(raw) * kAdcReferenceVoltage) / static_cast<float>(kAdcMax);
+  return rawToVoltage(raw);
 }
 
 static void publishTelemetry() {
   const uint16_t raw = analogRead(kSensorPin);
-  const float voltage = (static_cast<float>(raw) * kAdcReferenceVoltage) / static_cast<float>(kAdcMax);
+  const float voltage = rawToVoltage(raw);
   const bool alert = raw >= kAlertThreshold;
 
   digitalWrite(kStatusLedPin, alert ? HIGH : LOW);
@@ -51,12 +59,12 @@ void setup() {
 void loop() {
   const uint32_t now = millis();
 
-  if ((now - lastSampleMs) >= kSampleIntervalMs) {
+  if (intervalElapsed(now, lastSampleMs, kSampleIntervalMs)) {
     lastSampleMs = now;
     publishTelemetry();
   }
 
-  if ((now - lastHeartbeatMs) >= kHeartbeatIntervalMs) {
+  if (intervalElapsed(now, lastHeartbeatMs, kHeartbeatIntervalMs)) {
     lastHeartbeatMs = now;
     Serial.print("Heartbeat: ");
     Serial.print(kNodeId);
