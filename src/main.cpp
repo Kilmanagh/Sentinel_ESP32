@@ -653,10 +653,11 @@ void handleSerialCommands() {
 
   while (Serial.available() > 0) {
     char c = (char)Serial.read();
-    if (c == '\r') continue;
-    if (c == '\n') {
-      processSerialCommand(lineBuffer);
-      lineBuffer = "";
+    if (c == '\r' || c == '\n') {
+      if (lineBuffer.length() > 0) {
+        processSerialCommand(lineBuffer);
+        lineBuffer = "";
+      }
       continue;
     }
 
