@@ -173,6 +173,14 @@ void setupIdentity();
 void loadRuntimeConfigDefaults();
 bool validateRuntimeConfig(const RuntimeConfig& cfg);
 void loadRuntimeConfig();
+bool saveRuntimeConfigToNvs();
+bool clearRuntimeConfigFromNvs();
+void printRuntimeConfig();
+bool parseBoolValue(const String& rawValue, bool& outValue);
+bool setRuntimeConfigValue(const String& key, const String& value);
+void applyRuntimeConfigNow();
+void processSerialCommand(String line);
+void handleSerialCommands();
 void setupWiFi();
 void applyWiFiNetworkConfig();
 void setupTimeSync();
@@ -243,6 +251,7 @@ void setup() {
   }
 
   Serial.println(F("[SYSTEM] Setup complete — entering main loop"));
+  Serial.println(F("[SYSTEM] Serial config: cfg help"));
   Serial.println();
 }
 
@@ -251,6 +260,8 @@ void setup() {
 // ============================================================================
 
 void loop() {
+  handleSerialCommands();
+
   // Maintain connections
   if (WiFi.status() != WL_CONNECTED) {
     reconnectWiFi();
@@ -406,6 +417,253 @@ void loadRuntimeConfig() {
   runtimeConfig = nvsConfig;
   configLoadedFromNvs = true;
   Serial.println(F("[CONFIG] Loaded runtime config from NVS"));
+}
+
+bool saveRuntimeConfigToNvs() {
+  if (!validateRuntimeConfig(runtimeConfig)) {
+    Serial.println(F("[CONFIG] Refusing to save: runtime config is invalid"));
+    return false;
+  }
+
+  if (!prefs.begin(CONFIG_NAMESPACE, false)) {
+    Serial.println(F("[CONFIG] Failed to open NVS for writing"));
+    return false;
+  }
+
+  prefs.putUShort("cfg_ver", CONFIG_VERSION);
+  prefs.putString("wifi_ssid", runtimeConfig.wifiSsid);
+  prefs.putString("wifi_pass", runtimeConfig.wifiPassword);
+  prefs.putBool("st_ip_en", runtimeConfig.useStaticIp);
+  prefs.putString("st_ip", runtimeConfig.staticIp);
+  prefs.putString("gw", runtimeConfig.gateway);
+  prefs.putString("subnet", runtimeConfig.subnet);
+  prefs.putString("dns1", runtimeConfig.dns1);
+  prefs.putString("dns2", runtimeConfig.dns2);
+  prefs.putBool("use_ntp", runtimeConfig.useNtp);
+  prefs.putString("tz", runtimeConfig.tzInfo);
+  prefs.putString("ntp1", runtimeConfig.ntpServer1);
+  prefs.putString("ntp2", runtimeConfig.ntpServer2);
+  prefs.putString("ntp3", runtimeConfig.ntpServer3);
+  prefs.putString("mqtt_srv", runtimeConfig.mqttServer);
+  prefs.putInt("mqtt_prt", runtimeConfig.mqttPort);
+  prefs.putString("mqtt_usr", runtimeConfig.mqttUser);
+  prefs.putString("mqtt_pwd", runtimeConfig.mqttPass);
+  prefs.end();
+
+  configLoadedFromNvs = true;
+  Serial.println(F("[CONFIG] Saved runtime config to NVS"));
+  return true;
+}
+
+bool clearRuntimeConfigFromNvs() {
+  if (!prefs.begin(CONFIG_NAMESPACE, false)) {
+    Serial.println(F("[CONFIG] Failed to open NVS for clearing"));
+    return false;
+  }
+  prefs.clear();
+  prefs.end();
+  configLoadedFromNvs = false;
+  Serial.println(F("[CONFIG] Cleared NVS config namespace"));
+  return true;
+}
+
+void printRuntimeConfig() {
+  Serial.println(F("[CONFIG] Active runtime config"));
+  Serial.printf("  source=%s\n", configLoadedFromNvs ? "NVS" : "defaults");
+  Serial.printf("  wifi_ssid=%s\n", runtimeConfig.wifiSsid.c_str());
+  Serial.printf("  wifi_pass=%s\n", runtimeConfig.wifiPassword.length() ? "***" : "");
+  Serial.printf("  static_ip_enabled=%s\n", runtimeConfig.useStaticIp ? "true" : "false");
+  Serial.printf("  static_ip=%s\n", runtimeConfig.staticIp.c_str());
+  Serial.printf("  gateway=%s\n", runtimeConfig.gateway.c_str());
+  Serial.printf("  subnet=%s\n", runtimeConfig.subnet.c_str());
+  Serial.printf("  dns1=%s\n", runtimeConfig.dns1.c_str());
+  Serial.printf("  dns2=%s\n", runtimeConfig.dns2.c_str());
+  Serial.printf("  use_ntp=%s\n", runtimeConfig.useNtp ? "true" : "false");
+  Serial.printf("  tz=%s\n", runtimeConfig.tzInfo.c_str());
+  Serial.printf("  ntp1=%s\n", runtimeConfig.ntpServer1.c_str());
+  Serial.printf("  ntp2=%s\n", runtimeConfig.ntpServer2.c_str());
+  Serial.printf("  ntp3=%s\n", runtimeConfig.ntpServer3.c_str());
+  Serial.printf("  mqtt_server=%s\n", runtimeConfig.mqttServer.c_str());
+  Serial.printf("  mqtt_port=%d\n", runtimeConfig.mqttPort);
+  Serial.printf("  mqtt_user=%s\n", runtimeConfig.mqttUser.c_str());
+  Serial.printf("  mqtt_pass=%s\n", runtimeConfig.mqttPass.length() ? "***" : "");
+}
+
+bool parseBoolValue(const String& rawValue, bool& outValue) {
+  String value = rawValue;
+  value.trim();
+  value.toLowerCase();
+  if (value == "1" || value == "true" || value == "on" || value == "yes") {
+    outValue = true;
+    return true;
+  }
+  if (value == "0" || value == "false" || value == "off" || value == "no") {
+    outValue = false;
+    return true;
+  }
+  return false;
+}
+
+bool setRuntimeConfigValue(const String& key, const String& value) {
+  if (key == "wifi_ssid") {
+    runtimeConfig.wifiSsid = value;
+  } else if (key == "wifi_pass") {
+    runtimeConfig.wifiPassword = value;
+  } else if (key == "static_ip_enabled") {
+    bool parsed;
+    if (!parseBoolValue(value, parsed)) return false;
+    runtimeConfig.useStaticIp = parsed;
+  } else if (key == "static_ip") {
+    runtimeConfig.staticIp = value;
+  } else if (key == "gateway") {
+    runtimeConfig.gateway = value;
+  } else if (key == "subnet") {
+    runtimeConfig.subnet = value;
+  } else if (key == "dns1") {
+    runtimeConfig.dns1 = value;
+  } else if (key == "dns2") {
+    runtimeConfig.dns2 = value;
+  } else if (key == "use_ntp") {
+    bool parsed;
+    if (!parseBoolValue(value, parsed)) return false;
+    runtimeConfig.useNtp = parsed;
+  } else if (key == "tz") {
+    runtimeConfig.tzInfo = value;
+  } else if (key == "ntp1") {
+    runtimeConfig.ntpServer1 = value;
+  } else if (key == "ntp2") {
+    runtimeConfig.ntpServer2 = value;
+  } else if (key == "ntp3") {
+    runtimeConfig.ntpServer3 = value;
+  } else if (key == "mqtt_server") {
+    runtimeConfig.mqttServer = value;
+  } else if (key == "mqtt_port") {
+    int port = value.toInt();
+    if (port < 1 || port > 65535) return false;
+    runtimeConfig.mqttPort = port;
+  } else if (key == "mqtt_user") {
+    runtimeConfig.mqttUser = value;
+  } else if (key == "mqtt_pass") {
+    runtimeConfig.mqttPass = value;
+  } else {
+    return false;
+  }
+
+  return true;
+}
+
+void applyRuntimeConfigNow() {
+  if (!validateRuntimeConfig(runtimeConfig)) {
+    Serial.println(F("[CONFIG] Cannot apply: runtime config is invalid"));
+    return;
+  }
+
+  WiFi.disconnect(false, false);
+  mqttClient.disconnect();
+  applyWiFiNetworkConfig();
+  setupMQTT();
+  reconnectWiFi();
+  reconnectMQTT();
+  Serial.println(F("[CONFIG] Applied runtime config to active services"));
+}
+
+void processSerialCommand(String line) {
+  line.trim();
+  if (line.length() == 0) return;
+
+  if (line.equalsIgnoreCase("cfg help")) {
+    Serial.println(F("[CONFIG] Commands:"));
+    Serial.println(F("  cfg show"));
+    Serial.println(F("  cfg set <key> <value>"));
+    Serial.println(F("  cfg save"));
+    Serial.println(F("  cfg load"));
+    Serial.println(F("  cfg apply"));
+    Serial.println(F("  cfg reset"));
+    Serial.println(F("[CONFIG] Keys:"));
+    Serial.println(F("  wifi_ssid wifi_pass static_ip_enabled static_ip gateway subnet dns1 dns2"));
+    Serial.println(F("  use_ntp tz ntp1 ntp2 ntp3 mqtt_server mqtt_port mqtt_user mqtt_pass"));
+    return;
+  }
+
+  if (line.equalsIgnoreCase("cfg show")) {
+    printRuntimeConfig();
+    return;
+  }
+
+  if (line.equalsIgnoreCase("cfg save")) {
+    saveRuntimeConfigToNvs();
+    return;
+  }
+
+  if (line.equalsIgnoreCase("cfg load")) {
+    loadRuntimeConfig();
+    Serial.println(F("[CONFIG] Reloaded runtime config from defaults/NVS"));
+    return;
+  }
+
+  if (line.equalsIgnoreCase("cfg apply")) {
+    applyRuntimeConfigNow();
+    return;
+  }
+
+  if (line.equalsIgnoreCase("cfg reset")) {
+    if (clearRuntimeConfigFromNvs()) {
+      loadRuntimeConfigDefaults();
+      configLoadedFromNvs = false;
+      Serial.println(F("[CONFIG] Runtime config reset to compile-time defaults"));
+    }
+    return;
+  }
+
+  if (line.startsWith("cfg set ")) {
+    String args = line.substring(8);
+    int split = args.indexOf(' ');
+    if (split <= 0) {
+      Serial.println(F("[CONFIG] Usage: cfg set <key> <value>"));
+      return;
+    }
+
+    String key = args.substring(0, split);
+    String value = args.substring(split + 1);
+    key.trim();
+    value.trim();
+
+    if (value.length() == 0) {
+      Serial.println(F("[CONFIG] Value cannot be empty for this command"));
+      return;
+    }
+
+    if (!setRuntimeConfigValue(key, value)) {
+      Serial.printf("[CONFIG] Invalid key or value: %s\n", key.c_str());
+      return;
+    }
+
+    Serial.printf("[CONFIG] Updated %s\n", key.c_str());
+    if (!validateRuntimeConfig(runtimeConfig)) {
+      Serial.println(F("[CONFIG] Warning: current runtime config is invalid until corrected"));
+    }
+    return;
+  }
+
+  Serial.println(F("[CONFIG] Unknown command. Use: cfg help"));
+}
+
+void handleSerialCommands() {
+  static String lineBuffer;
+
+  while (Serial.available() > 0) {
+    char c = (char)Serial.read();
+    if (c == '\r') continue;
+    if (c == '\n') {
+      processSerialCommand(lineBuffer);
+      lineBuffer = "";
+      continue;
+    }
+
+    if (lineBuffer.length() < 255) {
+      lineBuffer += c;
+    }
+  }
 }
 
 // ============================================================================
