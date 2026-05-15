@@ -38,6 +38,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <Preferences.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
@@ -99,6 +100,30 @@ const char* MQTT_PASS     = "";         // leave blank if no auth
 #define DOOR_DEBOUNCE       50      // door switch debounce (ms)
 
 // ============================================================================
+//  RUNTIME CONFIG (NVS + compile-time defaults)
+// ============================================================================
+
+struct RuntimeConfig {
+  String wifiSsid;
+  String wifiPassword;
+  bool useStaticIp;
+  String staticIp;
+  String gateway;
+  String subnet;
+  String dns1;
+  String dns2;
+  bool useNtp;
+  String tzInfo;
+  String ntpServer1;
+  String ntpServer2;
+  String ntpServer3;
+  String mqttServer;
+  int mqttPort;
+  String mqttUser;
+  String mqttPass;
+};
+
+// ============================================================================
 //  GLOBAL OBJECTS & STATE
 // ============================================================================
 
@@ -106,6 +131,13 @@ WiFiClient   espClient;
 PubSubClient mqttClient(espClient);
 Adafruit_BME280 bme;
 BLEScan* pBLEScan = nullptr;
+Preferences prefs;
+
+RuntimeConfig runtimeConfig;
+bool configLoadedFromNvs = false;
+
+const uint16_t CONFIG_VERSION = 1;
+const char* CONFIG_NAMESPACE = "sentinel_cfg";
 
 // MAC-based identity
 String deviceMAC;
@@ -138,6 +170,9 @@ unsigned long bootTime       = 0;
 // ============================================================================
 
 void setupIdentity();
+void loadRuntimeConfigDefaults();
+bool validateRuntimeConfig(const RuntimeConfig& cfg);
+void loadRuntimeConfig();
 void setupWiFi();
 void applyWiFiNetworkConfig();
 void setupTimeSync();
@@ -180,6 +215,7 @@ void setup() {
   Serial.println(F("  Multi-Sensor Security & Environment"));
   Serial.println(F("========================================"));
 
+  loadRuntimeConfig();
   setupIdentity();
   setupLED();
   setupWiFi();
@@ -281,6 +317,97 @@ void setupIdentity() {
   Serial.printf("[IDENTITY] Topic base: %s\n", topicBase.c_str());
 }
 
+void loadRuntimeConfigDefaults() {
+  runtimeConfig.wifiSsid = WIFI_SSID;
+  runtimeConfig.wifiPassword = WIFI_PASSWORD;
+  runtimeConfig.useStaticIp = WIFI_USE_STATIC_IP;
+  runtimeConfig.staticIp = WIFI_STATIC_IP;
+  runtimeConfig.gateway = WIFI_GATEWAY;
+  runtimeConfig.subnet = WIFI_SUBNET;
+  runtimeConfig.dns1 = WIFI_DNS1;
+  runtimeConfig.dns2 = WIFI_DNS2;
+  runtimeConfig.useNtp = TIME_USE_NTP;
+  runtimeConfig.tzInfo = TZ_INFO;
+  runtimeConfig.ntpServer1 = NTP_SERVER_1;
+  runtimeConfig.ntpServer2 = NTP_SERVER_2;
+  runtimeConfig.ntpServer3 = NTP_SERVER_3;
+  runtimeConfig.mqttServer = MQTT_SERVER;
+  runtimeConfig.mqttPort = MQTT_PORT;
+  runtimeConfig.mqttUser = MQTT_USER;
+  runtimeConfig.mqttPass = MQTT_PASS;
+}
+
+bool validateRuntimeConfig(const RuntimeConfig& cfg) {
+  if (cfg.wifiSsid.length() == 0 || cfg.mqttServer.length() == 0) {
+    return false;
+  }
+  if (cfg.mqttPort < 1 || cfg.mqttPort > 65535) {
+    return false;
+  }
+  if (!cfg.useStaticIp) {
+    return true;
+  }
+
+  IPAddress localIp;
+  IPAddress gateway;
+  IPAddress subnet;
+  IPAddress dns1;
+  IPAddress dns2;
+
+  return localIp.fromString(cfg.staticIp) &&
+         gateway.fromString(cfg.gateway) &&
+         subnet.fromString(cfg.subnet) &&
+         dns1.fromString(cfg.dns1) &&
+         dns2.fromString(cfg.dns2);
+}
+
+void loadRuntimeConfig() {
+  loadRuntimeConfigDefaults();
+  configLoadedFromNvs = false;
+
+  if (!prefs.begin(CONFIG_NAMESPACE, true)) {
+    Serial.println(F("[CONFIG] NVS unavailable; using compile-time defaults"));
+    return;
+  }
+
+  const uint16_t storedVersion = prefs.getUShort("cfg_ver", 0);
+  if (storedVersion != CONFIG_VERSION) {
+    Serial.printf("[CONFIG] No matching config version in NVS (found %u, need %u); using defaults\n",
+                  storedVersion, CONFIG_VERSION);
+    prefs.end();
+    return;
+  }
+
+  RuntimeConfig nvsConfig = runtimeConfig;
+  nvsConfig.wifiSsid = prefs.getString("wifi_ssid", runtimeConfig.wifiSsid);
+  nvsConfig.wifiPassword = prefs.getString("wifi_pass", runtimeConfig.wifiPassword);
+  nvsConfig.useStaticIp = prefs.getBool("st_ip_en", runtimeConfig.useStaticIp);
+  nvsConfig.staticIp = prefs.getString("st_ip", runtimeConfig.staticIp);
+  nvsConfig.gateway = prefs.getString("gw", runtimeConfig.gateway);
+  nvsConfig.subnet = prefs.getString("subnet", runtimeConfig.subnet);
+  nvsConfig.dns1 = prefs.getString("dns1", runtimeConfig.dns1);
+  nvsConfig.dns2 = prefs.getString("dns2", runtimeConfig.dns2);
+  nvsConfig.useNtp = prefs.getBool("use_ntp", runtimeConfig.useNtp);
+  nvsConfig.tzInfo = prefs.getString("tz", runtimeConfig.tzInfo);
+  nvsConfig.ntpServer1 = prefs.getString("ntp1", runtimeConfig.ntpServer1);
+  nvsConfig.ntpServer2 = prefs.getString("ntp2", runtimeConfig.ntpServer2);
+  nvsConfig.ntpServer3 = prefs.getString("ntp3", runtimeConfig.ntpServer3);
+  nvsConfig.mqttServer = prefs.getString("mqtt_srv", runtimeConfig.mqttServer);
+  nvsConfig.mqttPort = prefs.getInt("mqtt_prt", runtimeConfig.mqttPort);
+  nvsConfig.mqttUser = prefs.getString("mqtt_usr", runtimeConfig.mqttUser);
+  nvsConfig.mqttPass = prefs.getString("mqtt_pwd", runtimeConfig.mqttPass);
+  prefs.end();
+
+  if (!validateRuntimeConfig(nvsConfig)) {
+    Serial.println(F("[CONFIG] NVS config invalid; using compile-time defaults"));
+    return;
+  }
+
+  runtimeConfig = nvsConfig;
+  configLoadedFromNvs = true;
+  Serial.println(F("[CONFIG] Loaded runtime config from NVS"));
+}
+
 // ============================================================================
 //  LED SETUP
 // ============================================================================
@@ -312,7 +439,7 @@ void setupWiFi() {
 }
 
 void applyWiFiNetworkConfig() {
-  if (!WIFI_USE_STATIC_IP) {
+  if (!runtimeConfig.useStaticIp) {
     Serial.println(F("[WIFI] Using DHCP network config"));
     return;
   }
@@ -323,11 +450,11 @@ void applyWiFiNetworkConfig() {
   IPAddress dns1;
   IPAddress dns2;
 
-  bool parsed = localIP.fromString(WIFI_STATIC_IP) &&
-                gateway.fromString(WIFI_GATEWAY) &&
-                subnet.fromString(WIFI_SUBNET) &&
-                dns1.fromString(WIFI_DNS1) &&
-                dns2.fromString(WIFI_DNS2);
+  bool parsed = localIP.fromString(runtimeConfig.staticIp) &&
+                gateway.fromString(runtimeConfig.gateway) &&
+                subnet.fromString(runtimeConfig.subnet) &&
+                dns1.fromString(runtimeConfig.dns1) &&
+                dns2.fromString(runtimeConfig.dns2);
 
   if (!parsed) {
     Serial.println(F("[WIFI] Invalid static network settings; falling back to DHCP"));
@@ -336,7 +463,9 @@ void applyWiFiNetworkConfig() {
 
   if (WiFi.config(localIP, gateway, subnet, dns1, dns2)) {
     Serial.printf("[WIFI] Static network config set: IP=%s GW=%s MASK=%s DNS1=%s DNS2=%s\n",
-                  WIFI_STATIC_IP, WIFI_GATEWAY, WIFI_SUBNET, WIFI_DNS1, WIFI_DNS2);
+                  runtimeConfig.staticIp.c_str(), runtimeConfig.gateway.c_str(),
+                  runtimeConfig.subnet.c_str(), runtimeConfig.dns1.c_str(),
+                  runtimeConfig.dns2.c_str());
   } else {
     Serial.println(F("[WIFI] Failed to apply static network config; using DHCP"));
   }
@@ -345,8 +474,10 @@ void applyWiFiNetworkConfig() {
 void reconnectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
 
-  Serial.printf("[WIFI] Connecting to %s", WIFI_SSID);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.printf("[WIFI] Connecting to %s (%s config)\n",
+                runtimeConfig.wifiSsid.c_str(),
+                configLoadedFromNvs ? "NVS" : "defaults");
+  WiFi.begin(runtimeConfig.wifiSsid.c_str(), runtimeConfig.wifiPassword.c_str());
 
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 40) {
@@ -369,14 +500,16 @@ void reconnectWiFi() {
 }
 
 void setupTimeSync() {
-  if (!TIME_USE_NTP || WiFi.status() != WL_CONNECTED) return;
+  if (!runtimeConfig.useNtp || WiFi.status() != WL_CONNECTED) return;
 
   time_t now = time(nullptr);
   if (now > 1700000000) return;  // already synced
 
   Serial.printf("[TIME] Syncing via NTP (tz=%s, servers=%s,%s,%s)\n",
-                TZ_INFO, NTP_SERVER_1, NTP_SERVER_2, NTP_SERVER_3);
-  configTzTime(TZ_INFO, NTP_SERVER_1, NTP_SERVER_2, NTP_SERVER_3);
+                runtimeConfig.tzInfo.c_str(), runtimeConfig.ntpServer1.c_str(),
+                runtimeConfig.ntpServer2.c_str(), runtimeConfig.ntpServer3.c_str());
+  configTzTime(runtimeConfig.tzInfo.c_str(), runtimeConfig.ntpServer1.c_str(),
+               runtimeConfig.ntpServer2.c_str(), runtimeConfig.ntpServer3.c_str());
 
   const int maxAttempts = 20;
   int attempt = 0;
@@ -406,7 +539,7 @@ uint32_t currentTimestampSeconds() {
 // ============================================================================
 
 void setupMQTT() {
-  mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
+  mqttClient.setServer(runtimeConfig.mqttServer.c_str(), runtimeConfig.mqttPort);
   mqttClient.setBufferSize(1024);
   mqttClient.setKeepAlive(60);
 }
@@ -416,12 +549,13 @@ void reconnectMQTT() {
   if (WiFi.status() != WL_CONNECTED) return;
 
   String willTopic = topicBase + "/status";
-  Serial.print(F("[MQTT] Connecting to broker... "));
+  Serial.printf("[MQTT] Connecting to broker %s:%d... ",
+                runtimeConfig.mqttServer.c_str(), runtimeConfig.mqttPort);
 
   bool connected = false;
-  if (strlen(MQTT_USER) > 0) {
+  if (runtimeConfig.mqttUser.length() > 0) {
     connected = mqttClient.connect(deviceName.c_str(),
-                                    MQTT_USER, MQTT_PASS,
+                                    runtimeConfig.mqttUser.c_str(), runtimeConfig.mqttPass.c_str(),
                                     willTopic.c_str(), 1, true, "offline");
   } else {
     connected = mqttClient.connect(deviceName.c_str(),
