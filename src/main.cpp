@@ -251,7 +251,7 @@ void setup() {
   }
 
   Serial.println(F("[SYSTEM] Setup complete — entering main loop"));
-  Serial.println(F("[SYSTEM] Serial config: cfg help"));
+  Serial.println(F("[SYSTEM] Serial config: cfg list"));
   Serial.println();
 }
 
@@ -571,7 +571,7 @@ void processSerialCommand(String line) {
   line.trim();
   if (line.length() == 0) return;
 
-  if (line.equalsIgnoreCase("cfg help")) {
+  if (line.equalsIgnoreCase("cfg help") || line.equalsIgnoreCase("cfg list") || line.equalsIgnoreCase("cfg ?")) {
     Serial.println(F("[CONFIG] Commands:"));
     Serial.println(F("  cfg show"));
     Serial.println(F("  cfg set <key> <value>"));
