@@ -45,20 +45,35 @@
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include <time.h>
 
 // ============================================================================
-//  USER CONFIGURATION — Edit these values for your environment
+//  USER CONFIGURATION
 // ============================================================================
 
-// WiFi credentials (LAN-only — no internet required)
+// Load credentials from include/secrets.h when present.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+// Fallback values to keep firmware buildable until secrets are configured.
 const char* WIFI_SSID     = "YOUR_WIFI_SSID";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-
-// MQTT broker (local network)
+const bool  WIFI_USE_STATIC_IP = false;
+const char* WIFI_STATIC_IP = "192.168.1.50";
+const char* WIFI_GATEWAY   = "192.168.1.1";
+const char* WIFI_SUBNET    = "255.255.255.0";
+const char* WIFI_DNS1      = "1.1.1.1";
+const char* WIFI_DNS2      = "8.8.8.8";
+const bool  TIME_USE_NTP   = true;
+const char* TZ_INFO        = "UTC0";
+const char* NTP_SERVER_1   = "192.168.1.100";
+const char* NTP_SERVER_2   = "";
+const char* NTP_SERVER_3   = "";
 const char* MQTT_SERVER   = "192.168.1.100";
 const int   MQTT_PORT     = 1883;
 const char* MQTT_USER     = "";         // leave blank if no auth
 const char* MQTT_PASS     = "";         // leave blank if no auth
+#endif
 
 // ============================================================================
 //  PIN DEFINITIONS
@@ -124,6 +139,8 @@ unsigned long bootTime       = 0;
 
 void setupIdentity();
 void setupWiFi();
+void applyWiFiNetworkConfig();
+void setupTimeSync();
 void setupMQTT();
 void setupBME280();
 void setupPIR();
@@ -147,6 +164,7 @@ float  computeComfortIndex(float tempF, float humidity);
 int    computeIAQScore(float humidity, float pressureHPa);
 String comfortLabel(float index);
 String iaqLabel(int score);
+uint32_t currentTimestampSeconds();
 void   mqttPublish(const char* topic, const char* payload, bool retained = false);
 
 // ============================================================================
@@ -289,7 +307,39 @@ void setupWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.persistent(true);
+  applyWiFiNetworkConfig();
   reconnectWiFi();
+}
+
+void applyWiFiNetworkConfig() {
+  if (!WIFI_USE_STATIC_IP) {
+    Serial.println(F("[WIFI] Using DHCP network config"));
+    return;
+  }
+
+  IPAddress localIP;
+  IPAddress gateway;
+  IPAddress subnet;
+  IPAddress dns1;
+  IPAddress dns2;
+
+  bool parsed = localIP.fromString(WIFI_STATIC_IP) &&
+                gateway.fromString(WIFI_GATEWAY) &&
+                subnet.fromString(WIFI_SUBNET) &&
+                dns1.fromString(WIFI_DNS1) &&
+                dns2.fromString(WIFI_DNS2);
+
+  if (!parsed) {
+    Serial.println(F("[WIFI] Invalid static network settings; falling back to DHCP"));
+    return;
+  }
+
+  if (WiFi.config(localIP, gateway, subnet, dns1, dns2)) {
+    Serial.printf("[WIFI] Static network config set: IP=%s GW=%s MASK=%s DNS1=%s DNS2=%s\n",
+                  WIFI_STATIC_IP, WIFI_GATEWAY, WIFI_SUBNET, WIFI_DNS1, WIFI_DNS2);
+  } else {
+    Serial.println(F("[WIFI] Failed to apply static network config; using DHCP"));
+  }
 }
 
 void reconnectWiFi() {
@@ -310,11 +360,45 @@ void reconnectWiFi() {
     Serial.println();
     Serial.printf("[WIFI] Connected — IP: %s  RSSI: %d dBm\n",
                   WiFi.localIP().toString().c_str(), WiFi.RSSI());
+    setupTimeSync();
     blinkLED(3, 100);
   } else {
     Serial.println();
     Serial.println(F("[WIFI] Connection failed — will retry"));
   }
+}
+
+void setupTimeSync() {
+  if (!TIME_USE_NTP || WiFi.status() != WL_CONNECTED) return;
+
+  time_t now = time(nullptr);
+  if (now > 1700000000) return;  // already synced
+
+  Serial.printf("[TIME] Syncing via NTP (tz=%s, servers=%s,%s,%s)\n",
+                TZ_INFO, NTP_SERVER_1, NTP_SERVER_2, NTP_SERVER_3);
+  configTzTime(TZ_INFO, NTP_SERVER_1, NTP_SERVER_2, NTP_SERVER_3);
+
+  const int maxAttempts = 20;
+  int attempt = 0;
+  while (attempt < maxAttempts) {
+    now = time(nullptr);
+    if (now > 1700000000) {
+      Serial.printf("[TIME] NTP sync complete: %lu\n", (unsigned long)now);
+      return;
+    }
+    delay(250);
+    attempt++;
+  }
+
+  Serial.println(F("[TIME] NTP sync timeout; using uptime timestamps until sync succeeds"));
+}
+
+uint32_t currentTimestampSeconds() {
+  time_t now = time(nullptr);
+  if (now > 1700000000) {
+    return (uint32_t)now;
+  }
+  return millis() / 1000;
 }
 
 // ============================================================================
@@ -631,7 +715,7 @@ void checkMotion() {
 
       StaticJsonDocument<64> doc;
       doc["motion"] = "detected";
-      doc["timestamp"] = now / 1000;
+      doc["timestamp"] = currentTimestampSeconds();
 
       char payload[64];
       serializeJson(doc, payload, sizeof(payload));
@@ -647,7 +731,7 @@ void checkMotion() {
 
     StaticJsonDocument<64> doc;
     doc["motion"] = "clear";
-    doc["timestamp"] = now / 1000;
+    doc["timestamp"] = currentTimestampSeconds();
 
     char payload[64];
     serializeJson(doc, payload, sizeof(payload));
@@ -680,7 +764,7 @@ void checkSound() {
     StaticJsonDocument<96> doc;
     doc["intrusion"]  = "detected";
     doc["peak_adc"]   = peakValue;
-    doc["timestamp"]  = millis() / 1000;
+    doc["timestamp"]  = currentTimestampSeconds();
 
     char payload[96];
     serializeJson(doc, payload, sizeof(payload));
@@ -734,7 +818,7 @@ void publishDoorState(bool state) {
   StaticJsonDocument<96> doc;
   doc["state"]     = doorStr;
   doc["raw"]       = state;
-  doc["timestamp"] = millis() / 1000;
+  doc["timestamp"] = currentTimestampSeconds();
 
   char payload[96];
   serializeJson(doc, payload, sizeof(payload));
@@ -787,7 +871,7 @@ void runBLEScan() {
   String payload = "{\"device_count\":" + String(callbacks.deviceCount) +
                    ",\"devices\":[" + callbacks.deviceList +
                    "],\"scan_duration_sec\":10" +
-                   ",\"timestamp\":" + String(millis() / 1000) + "}";
+                   ",\"timestamp\":" + String(currentTimestampSeconds()) + "}";
 
   String topic = topicBase + "/ble";
   mqttPublish(topic.c_str(), payload.c_str());
