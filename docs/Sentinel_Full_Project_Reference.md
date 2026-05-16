@@ -1,81 +1,77 @@
-# Sentinel ESP32 Project: Complete Documentation Package
+# Sentinel ESP32 Project Reference
 
-This document contains all the necessary technical specifications, topic maps, and calibration guides for the Sentinel ESP32 Multi-Sensor Node.
+This is the high-level reference for the current Sentinel ESP32 firmware. Use it as the entry point for hardware, MQTT, and runtime configuration, then follow the linked docs for detail.
 
----
+## Firmware summary
 
-## 1. Hardware Deliverables
-This section details the physical components and pin mapping.
+- Source file: `src/main.cpp`
+- Build system: PlatformIO
+- Board target: `esp32dev`
+- Home Assistant integration: MQTT auto-discovery
+- Runtime configuration: ESP32 NVS + MQTT config topics + serial `cfg` commands
+- BLE presence model: fixed 4-slot iBeacon watchlist using `UUID + major + minor`
 
-### Bill of Materials (BOM)
-- **Microcontroller**: ESP-WROOM-32 / ESP-32S Development Board.
-- **Environmental Sensor**: BME280 (Supports 3.3V, I2C interface).
-- **Motion Sensor**: AM312 Mini PIR Sensor (Supports 2.7V - 12V; powered via 3.3V).
-- **Acoustic Sensor**: MAX9814 Microphone Amplifier (Analog output connected to GPIO 34).
-- **Security Sensor**: MC-38 Magnetic Reed Switch (**Normally Closed**, connected to GPIO 32).
-- **Status Indicator**: Onboard LED (GPIO 2).
+## Hardware summary
 
-### Hardware Pin Mapping
-| Hardware Component | Component Pin | ESP32 GPIO | Firmware Variable | Pin Type |
-| :--- | :--- | :--- | :--- | :--- |
-| **BME280 Sensor** | SDA | **GPIO 21** | `BME_SDA` | I2C Data |
-| **BME280 Sensor** | SCL | **GPIO 22** | `BME_SCL` | I2C Clock |
-| **AM312 PIR** | Out | **GPIO 27** | `PIN_PIR` | Digital Input |
-| **MC-38 Reed Switch (NC)**| Signal | **GPIO 32** | `PIN_DOOR` | Digital Input (Internal Pull-up) |
-| **MAX9814 Microphone** | Out | **GPIO 34** | `PIN_SOUND` | Analog Input |
-| **Status LED** | Onboard | **GPIO 2** | `PIN_LED` | Digital Output |
+### Bill of materials
 
----
+- ESP-WROOM-32 / ESP32 dev board
+- BME280 environmental sensor
+- AM312 PIR motion sensor
+- MAX9814 microphone amplifier
+- MC-38 reed switch
+- Onboard status LED
 
-## 2. MQTT Topic Map
-This section details the communication protocols for Home Assistant.
+### Pin mapping
 
-### Purpose: Discovery (Home Assistant)
-**Topic:** `homeassistant/<component>/<device_id>/<object_id>/config`
-- Published once at boot to automatically configure entities.
+| Hardware Component | ESP32 GPIO | Firmware Variable | Notes |
+| :--- | :--- | :--- | :--- |
+| BME280 SDA | 21 | `BME_SDA` | I2C data |
+| BME280 SCL | 22 | `BME_SCL` | I2C clock |
+| AM312 PIR OUT | 27 | `PIN_PIR` | Digital input |
+| MC-38 Reed Signal | 32 | `PIN_DOOR` | NC switch with internal pull-up |
+| MAX9814 OUT | 34 | `PIN_SOUND` | Analog input |
+| Status LED | 2 | `PIN_LED` | Digital output |
 
-### Purpose: Telemetry & State (Operational Data)
-All state topics follow the format: `sentinel/<device_id>/<subtopic>`
+## MQTT summary
 
-| Purpose | Subtopic | Payload Fields |
-| :--- | :--- | :--- |
-| **Environmental** | `/environment` | `temperature_f`, `humidity`, `pressure_hpa`, `iaq_score` |
-| **Security: Motion** | `/motion` | `motion` ("detected" or "clear") |
-| **Security: Sound** | `/sound` | `intrusion` ("detected"), `peak_adc` (int) |
-| **Security: Door** | `/door` | `state` ("OPEN" or "CLOSED"), `raw` (0 or 1) |
-| **System Status** | `/status` | "online" or "offline" (LWT) |
-| **Presence** | `/ble` | `device_count` (int) |
-| **Diagnostics** | `/diagnostics` | `uptime_sec`, `free_heap`, `rssi` |
+State topics use:
 
----
+- `sentinel/<device_id>/environment`
+- `sentinel/<device_id>/motion`
+- `sentinel/<device_id>/sound`
+- `sentinel/<device_id>/door`
+- `sentinel/<device_id>/ble_watchlist`
+- `sentinel/<device_id>/diagnostics`
+- `sentinel/<device_id>/status`
 
-## 3. Calibration Guide
-Technical instructions for tuning the sensors.
+Runtime config topics use:
 
-### Acoustic Sensor (MAX9814)
-- **Configuration**: `#define SOUND_THRESHOLD 1500`
-- **Steps**: Monitor peak ADC in Serial Monitor (115200). Set threshold 20% above quiet room noise.
+- `sentinel/<device_id>/config/<key>/state`
+- `sentinel/<device_id>/config/<key>/set`
 
-### Motion Sensor (AM312 PIR)
-- **Configuration**: `#define PIR_COOLDOWN 10000`
-- **Steps**: Increase cooldown to prevent redundant triggers. Use physical masking (tape) on the lens to narrow field of view.
+See `docs/MQTT_Topic_Map.md` for payload details.
 
-### Environmental Offset (BME280)
-- **Steps**: If ESP32 heat causes temperature drift, add a math correction:
-  - `float tempF = ((bme.readTemperature() * 9.0 / 5.0) + 32.0) - offset;`
+## Runtime adjustment summary
 
----
+Runtime-tunable groups include:
 
-## 4. Electrical Schematic (Netlist Style)
-For use in PCB design software (KiCad/EasyEDA).
+- Wi-Fi, static IP, DNS, NTP, and MQTT defaults
+- PIR warmup, detect debounce, clear debounce, and hold time
+- Sound sample window, hold time, and threshold
+- BLE beacon slot name, UUID, major, and minor
 
-- **Net: 3.3V** -> ESP32(3V3), BME280(VCC), AM312(VCC), MAX9814(VCC)
-- **Net: GND** -> ESP32(GND), BME280(GND), AM312(GND), MAX9814(GND), MC-38(Pin 2)
-- **Net: SDA** -> ESP32(GPIO 21), BME280(SDA)
-- **Net: SCL** -> ESP32(GPIO 22), BME280(SCL)
-- **Net: PIR** -> ESP32(GPIO 27), AM312(OUT)
-- **Net: SOUND** -> ESP32(GPIO 34), MAX9814(OUT)
-- **Net: DOOR** -> ESP32(GPIO 32), MC-38(Pin 1)
+Adjustment methods:
 
----
-*End of Documentation Package.*
+- Home Assistant MQTT config entities
+- Serial `cfg` commands
+- Serial BLE enrollment commands: `ble help`, `ble enroll on`, `ble enroll off`
+
+See `docs/Adjustments.MD` for operator workflow.
+
+## Related docs
+
+- `docs/Sentinel_ESP32_Node.md` for firmware build/flash and serial usage
+- `docs/MQTT_Topic_Map.md` for MQTT payloads and config topics
+- `docs/Adjustments.MD` for tuning and beacon enrollment
+- `docs/Hardware_Deliverables.md` for hardware deliverables

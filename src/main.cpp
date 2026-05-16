@@ -97,6 +97,8 @@ const char* MQTT_PASS     = "";         // leave blank if no auth
 #define BLE_SCAN_DURATION_MS 10000   // each BLE scan runs for 10s
 #define BLE_PRESENCE_TIMEOUT_MS 150000 // mark a watched beacon away if unseen for about 2.5 minutes
 #define BLE_MAX_WATCH_BEACONS 4      // fixed-size watchlist keeps BLE lightweight
+#define BLE_ENROLLMENT_CACHE_SIZE 12
+#define BLE_ENROLLMENT_LOG_COOLDOWN_MS 30000
 #define SOUND_SAMPLE_WINDOW_MS 100  // sound sampling window (ms)
 #define SOUND_THRESHOLD_ADC   1200  // peak-to-peak ADC threshold for MAX9814
 #define SOUND_HOLD_MS         3000  // keep sound intrusion latched for HA
@@ -189,6 +191,9 @@ int          pirLastRawState = LOW;
 bool beaconPresent[BLE_MAX_WATCH_BEACONS] = {false, false, false, false};
 int beaconRssi[BLE_MAX_WATCH_BEACONS] = {0, 0, 0, 0};
 unsigned long beaconLastSeenMs[BLE_MAX_WATCH_BEACONS] = {0, 0, 0, 0};
+bool bleEnrollmentLoggingEnabled = false;
+String bleEnrollmentSeenIds[BLE_ENROLLMENT_CACHE_SIZE];
+unsigned long bleEnrollmentSeenMs[BLE_ENROLLMENT_CACHE_SIZE] = {0};
 
 // Diagnostics counters
 unsigned long wifiReconnects = 0;
@@ -251,6 +256,7 @@ String beaconDisplayName(size_t index);
 bool isBeaconConfigured(size_t index);
 void processBleScanResult(BLEAdvertisedDevice advertisedDevice);
 bool parseIBeaconAdvertisement(BLEAdvertisedDevice advertisedDevice, String& uuid, uint16_t& major, uint16_t& minor);
+void logIBeaconSighting(const String& uuid, uint16_t major, uint16_t minor, int rssi);
 void processBeaconAdvertisement(const String& uuid, uint16_t major, uint16_t minor, int rssi);
 void expireBeaconPresence(unsigned long nowMs);
 void publishDiagnostics();
@@ -845,6 +851,35 @@ void processSerialCommand(String line) {
   line.trim();
   if (line.length() == 0) return;
 
+  if (line.equalsIgnoreCase("ble help") || line.equalsIgnoreCase("ble ?")) {
+    Serial.println(F("[BLE] Commands:"));
+    Serial.println(F("  ble enroll on      Enable serial logging of seen iBeacon identifiers"));
+    Serial.println(F("  ble enroll off     Disable serial enrollment logging"));
+    Serial.println(F("  ble enroll status  Show whether enrollment logging is enabled"));
+    return;
+  }
+
+  if (line.equalsIgnoreCase("ble enroll on")) {
+    bleEnrollmentLoggingEnabled = true;
+    memset(bleEnrollmentSeenMs, 0, sizeof(bleEnrollmentSeenMs));
+    for (size_t i = 0; i < BLE_ENROLLMENT_CACHE_SIZE; i++) {
+      bleEnrollmentSeenIds[i] = "";
+    }
+    Serial.println(F("[BLE] Enrollment logging enabled. Nearby iBeacons will be printed once per cooldown window."));
+    return;
+  }
+
+  if (line.equalsIgnoreCase("ble enroll off")) {
+    bleEnrollmentLoggingEnabled = false;
+    Serial.println(F("[BLE] Enrollment logging disabled"));
+    return;
+  }
+
+  if (line.equalsIgnoreCase("ble enroll status")) {
+    Serial.printf("[BLE] Enrollment logging is %s\n", bleEnrollmentLoggingEnabled ? "ON" : "OFF");
+    return;
+  }
+
   if (line.equalsIgnoreCase("cfg help") || line.equalsIgnoreCase("cfg list") || line.equalsIgnoreCase("cfg ?")) {
     Serial.println(F("[CONFIG] Commands:"));
     Serial.println(F("  cfg show"));
@@ -863,6 +898,7 @@ void processSerialCommand(String line) {
     Serial.println(F("  ble_beacon3_name ble_beacon3_uuid ble_beacon3_major ble_beacon3_minor"));
     Serial.println(F("  ble_beacon4_name ble_beacon4_uuid ble_beacon4_major ble_beacon4_minor"));
     Serial.println(F("  Use value CLEAR for ble_beacon*_uuid to empty a slot"));
+    Serial.println(F("[BLE] Use 'ble help' for iBeacon enrollment logging commands"));
     return;
   }
 
@@ -2216,6 +2252,7 @@ void processBleScanResult(BLEAdvertisedDevice advertisedDevice) {
     return;
   }
 
+  logIBeaconSighting(uuid, major, minor, advertisedDevice.getRSSI());
   processBeaconAdvertisement(uuid, major, minor, advertisedDevice.getRSSI());
 }
 
@@ -2242,6 +2279,47 @@ bool parseIBeaconAdvertisement(BLEAdvertisedDevice advertisedDevice, String& uui
   major = ((uint16_t)data[20] << 8) | data[21];
   minor = ((uint16_t)data[22] << 8) | data[23];
   return true;
+}
+
+void logIBeaconSighting(const String& uuid, uint16_t major, uint16_t minor, int rssi) {
+  if (!bleEnrollmentLoggingEnabled) {
+    return;
+  }
+
+  String sightingId = uuid + "/" + String(major) + "/" + String(minor);
+  unsigned long nowMs = millis();
+  size_t replacementIndex = 0;
+  unsigned long oldestSeenMs = bleEnrollmentSeenMs[0];
+
+  for (size_t i = 0; i < BLE_ENROLLMENT_CACHE_SIZE; i++) {
+    if (bleEnrollmentSeenIds[i] == sightingId) {
+      if ((nowMs - bleEnrollmentSeenMs[i]) < BLE_ENROLLMENT_LOG_COOLDOWN_MS) {
+        return;
+      }
+      bleEnrollmentSeenMs[i] = nowMs;
+      Serial.printf("[BLE][ENROLL] UUID:%s Major:%u Minor:%u RSSI:%d\n",
+                    uuid.c_str(), (unsigned)major, (unsigned)minor, rssi);
+      return;
+    }
+
+    if (bleEnrollmentSeenIds[i].length() == 0) {
+      bleEnrollmentSeenIds[i] = sightingId;
+      bleEnrollmentSeenMs[i] = nowMs;
+      Serial.printf("[BLE][ENROLL] UUID:%s Major:%u Minor:%u RSSI:%d\n",
+                    uuid.c_str(), (unsigned)major, (unsigned)minor, rssi);
+      return;
+    }
+
+    if (bleEnrollmentSeenMs[i] < oldestSeenMs) {
+      oldestSeenMs = bleEnrollmentSeenMs[i];
+      replacementIndex = i;
+    }
+  }
+
+  bleEnrollmentSeenIds[replacementIndex] = sightingId;
+  bleEnrollmentSeenMs[replacementIndex] = nowMs;
+  Serial.printf("[BLE][ENROLL] UUID:%s Major:%u Minor:%u RSSI:%d\n",
+                uuid.c_str(), (unsigned)major, (unsigned)minor, rssi);
 }
 
 void processBeaconAdvertisement(const String& uuid, uint16_t major, uint16_t minor, int rssi) {

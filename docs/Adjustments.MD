@@ -118,6 +118,27 @@ Home Assistant config entities:
 - Slot major/minor values default to `0`
 - Presence timeout is about 150 seconds
 
+### Serial enrollment workflow
+
+If you do not already know the beacon identity, use the serial enrollment logger first.
+
+Commands:
+
+```text
+ble help
+ble enroll on
+ble enroll status
+ble enroll off
+```
+
+While `ble enroll on` is active, the ESP32 prints nearby iBeacon advertisements in this format:
+
+```text
+[BLE][ENROLL] UUID:12345678-1234-1234-1234-1234567890AB Major:100 Minor:7 RSSI:-61
+```
+
+Duplicate sightings are suppressed for about 30 seconds per beacon identity so the serial console stays readable.
+
 ### Home Assistant workflow
 
 1. Open the Sentinel device in Home Assistant.
