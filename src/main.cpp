@@ -128,6 +128,10 @@ struct RuntimeConfig {
   int mqttPort;
   String mqttUser;
   String mqttPass;
+  unsigned long pirWarmupMs;
+  unsigned long pirDetectStableMs;
+  unsigned long pirClearStableMs;
+  unsigned long pirHoldMs;
 };
 
 // ============================================================================
@@ -382,6 +386,10 @@ void loadRuntimeConfigDefaults() {
   runtimeConfig.mqttPort = MQTT_PORT;
   runtimeConfig.mqttUser = MQTT_USER;
   runtimeConfig.mqttPass = MQTT_PASS;
+  runtimeConfig.pirWarmupMs = PIR_WARMUP_MS;
+  runtimeConfig.pirDetectStableMs = PIR_DETECT_STABLE_MS;
+  runtimeConfig.pirClearStableMs = PIR_CLEAR_STABLE_MS;
+  runtimeConfig.pirHoldMs = PIR_HOLD_MS;
 }
 
 bool validateRuntimeConfig(const RuntimeConfig& cfg) {
@@ -389,6 +397,12 @@ bool validateRuntimeConfig(const RuntimeConfig& cfg) {
     return false;
   }
   if (cfg.mqttPort < 1 || cfg.mqttPort > 65535) {
+    return false;
+  }
+  if (cfg.pirWarmupMs > 300000 ||
+      cfg.pirDetectStableMs < 10 || cfg.pirDetectStableMs > 10000 ||
+      cfg.pirClearStableMs < 50 || cfg.pirClearStableMs > 60000 ||
+      cfg.pirHoldMs < 250 || cfg.pirHoldMs > 60000) {
     return false;
   }
   if (!cfg.useStaticIp) {
@@ -443,6 +457,10 @@ void loadRuntimeConfig() {
   nvsConfig.mqttPort = prefs.getInt("mqtt_prt", runtimeConfig.mqttPort);
   nvsConfig.mqttUser = prefs.getString("mqtt_usr", runtimeConfig.mqttUser);
   nvsConfig.mqttPass = prefs.getString("mqtt_pwd", runtimeConfig.mqttPass);
+  nvsConfig.pirWarmupMs = prefs.getULong("pir_warm", runtimeConfig.pirWarmupMs);
+  nvsConfig.pirDetectStableMs = prefs.getULong("pir_det", runtimeConfig.pirDetectStableMs);
+  nvsConfig.pirClearStableMs = prefs.getULong("pir_clr", runtimeConfig.pirClearStableMs);
+  nvsConfig.pirHoldMs = prefs.getULong("pir_hold", runtimeConfig.pirHoldMs);
   prefs.end();
 
   if (!validateRuntimeConfig(nvsConfig)) {
@@ -484,6 +502,10 @@ bool saveRuntimeConfigToNvs() {
   prefs.putInt("mqtt_prt", runtimeConfig.mqttPort);
   prefs.putString("mqtt_usr", runtimeConfig.mqttUser);
   prefs.putString("mqtt_pwd", runtimeConfig.mqttPass);
+  prefs.putULong("pir_warm", runtimeConfig.pirWarmupMs);
+  prefs.putULong("pir_det", runtimeConfig.pirDetectStableMs);
+  prefs.putULong("pir_clr", runtimeConfig.pirClearStableMs);
+  prefs.putULong("pir_hold", runtimeConfig.pirHoldMs);
   prefs.end();
 
   configLoadedFromNvs = true;
@@ -523,6 +545,10 @@ void printRuntimeConfig() {
   Serial.printf("  mqtt_port=%d\n", runtimeConfig.mqttPort);
   Serial.printf("  mqtt_user=%s\n", runtimeConfig.mqttUser.c_str());
   Serial.printf("  mqtt_pass=%s\n", runtimeConfig.mqttPass.length() ? "***" : "");
+  Serial.printf("  pir_warmup_ms=%lu\n", runtimeConfig.pirWarmupMs);
+  Serial.printf("  pir_detect_stable_ms=%lu\n", runtimeConfig.pirDetectStableMs);
+  Serial.printf("  pir_clear_stable_ms=%lu\n", runtimeConfig.pirClearStableMs);
+  Serial.printf("  pir_hold_ms=%lu\n", runtimeConfig.pirHoldMs);
 }
 
 bool parseBoolValue(const String& rawValue, bool& outValue) {
@@ -541,6 +567,14 @@ bool parseBoolValue(const String& rawValue, bool& outValue) {
 }
 
 bool setRuntimeConfigValue(const String& key, const String& value) {
+  auto parseUnsigned = [&](unsigned long& target) -> bool {
+    for (size_t i = 0; i < value.length(); i++) {
+      if (!isDigit(value.charAt(i))) return false;
+    }
+    target = strtoul(value.c_str(), nullptr, 10);
+    return true;
+  };
+
   if (key == "wifi_ssid") {
     runtimeConfig.wifiSsid = value;
   } else if (key == "wifi_pass") {
@@ -581,6 +615,14 @@ bool setRuntimeConfigValue(const String& key, const String& value) {
     runtimeConfig.mqttUser = value;
   } else if (key == "mqtt_pass") {
     runtimeConfig.mqttPass = value;
+  } else if (key == "pir_warmup_ms") {
+    if (!parseUnsigned(runtimeConfig.pirWarmupMs)) return false;
+  } else if (key == "pir_detect_stable_ms") {
+    if (!parseUnsigned(runtimeConfig.pirDetectStableMs)) return false;
+  } else if (key == "pir_clear_stable_ms") {
+    if (!parseUnsigned(runtimeConfig.pirClearStableMs)) return false;
+  } else if (key == "pir_hold_ms") {
+    if (!parseUnsigned(runtimeConfig.pirHoldMs)) return false;
   } else {
     return false;
   }
@@ -598,6 +640,7 @@ void applyRuntimeConfigNow() {
   mqttClient.disconnect();
   applyWiFiNetworkConfig();
   setupMQTT();
+  setupPIR();
   reconnectWiFi();
   reconnectMQTT();
   Serial.println(F("[CONFIG] Applied runtime config to active services"));
@@ -618,6 +661,7 @@ void processSerialCommand(String line) {
     Serial.println(F("[CONFIG] Keys:"));
     Serial.println(F("  wifi_ssid wifi_pass static_ip_enabled static_ip gateway subnet dns1 dns2"));
     Serial.println(F("  use_ntp tz ntp1 ntp2 ntp3 mqtt_server mqtt_port mqtt_user mqtt_pass"));
+    Serial.println(F("  pir_warmup_ms pir_detect_stable_ms pir_clear_stable_ms pir_hold_ms"));
     return;
   }
 
@@ -1136,7 +1180,7 @@ String iaqLabel(int score) {
 
 void setupPIR() {
   pinMode(PIN_PIR, INPUT);
-  pirWarmupUntil = millis() + PIR_WARMUP_MS;
+  pirWarmupUntil = millis() + runtimeConfig.pirWarmupMs;
   pirHighSince = 0;
   pirLowSince = 0;
   pirHoldUntil = 0;
@@ -1169,11 +1213,11 @@ void checkMotion() {
   }
 
   if (pirState == HIGH) {
-    pirHoldUntil = now + PIR_HOLD_MS;
+    pirHoldUntil = now + runtimeConfig.pirHoldMs;
 
     if (!motionDetected &&
         pirHighSince > 0 &&
-        (now - pirHighSince) >= PIR_DETECT_STABLE_MS &&
+      (now - pirHighSince) >= runtimeConfig.pirDetectStableMs &&
         (now - lastMotionPub) >= PIR_COOLDOWN) {
       motionDetected = true;
       lastMotionPub = now;
@@ -1197,7 +1241,7 @@ void checkMotion() {
   if (motionDetected &&
       pirLowSince > 0 &&
       now >= pirHoldUntil &&
-      (now - pirLowSince) >= PIR_CLEAR_STABLE_MS) {
+      (now - pirLowSince) >= runtimeConfig.pirClearStableMs) {
     motionDetected = false;
 
     StaticJsonDocument<64> doc;
