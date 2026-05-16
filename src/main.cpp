@@ -97,8 +97,9 @@ const char* MQTT_PASS     = "";         // leave blank if no auth
 #define BLE_SCAN_DURATION_MS 10000  // each BLE scan runs for 10s
 #define BLE_DEVICE_TIMEOUT_MS 150000 // remove device if unseen for about 2.5 minutes
 #define BLE_MAX_TRACKED_DEVICES 24   // cap tracked BLE devices to protect RAM
-#define SOUND_SAMPLE_WINDOW 100     // sound sampling window (ms)
-#define SOUND_THRESHOLD     1500    // Calibrated for MAX9814
+#define SOUND_SAMPLE_WINDOW_MS 100  // sound sampling window (ms)
+#define SOUND_THRESHOLD_ADC   1200  // peak-to-peak ADC threshold for MAX9814
+#define SOUND_HOLD_MS         3000  // keep sound intrusion latched for HA
 #define PIR_COOLDOWN        10000   // motion re-trigger cooldown (ms)
 #define DOOR_DEBOUNCE       50      // door switch debounce (ms)
 #define PIR_WARMUP_MS       30000   // AM312 settle time after power-up
@@ -132,6 +133,9 @@ struct RuntimeConfig {
   unsigned long pirDetectStableMs;
   unsigned long pirClearStableMs;
   unsigned long pirHoldMs;
+  unsigned long soundSampleWindowMs;
+  unsigned long soundHoldMs;
+  unsigned long soundThresholdAdc;
 };
 
 // ============================================================================
@@ -170,10 +174,12 @@ bool     lastDoorState      = HIGH;
 bool     currentDoorState   = HIGH;
 unsigned long lastDoorChange = 0;
 bool     motionDetected     = false;
+bool     soundIntrusionActive = false;
 unsigned long pirWarmupUntil = 0;
 unsigned long pirHighSince   = 0;
 unsigned long pirLowSince    = 0;
 unsigned long pirHoldUntil   = 0;
+unsigned long soundHoldUntil = 0;
 int          pirLastRawState = LOW;
 
 struct BleTrackedDevice {
@@ -226,8 +232,12 @@ void reconnectMQTT();
 void publishAutoDiscovery();
 void publishPirConfigDiscovery();
 void publishPirConfigState();
+void publishSoundConfigDiscovery();
+void publishSoundConfigState();
+void publishSoundState(const char* intrusionState, int peakToPeak, int minSample, int maxSample);
 void mqttMessageCallback(char* topic, byte* payload, unsigned int length);
 bool handlePirConfigCommand(const String& topic, const String& payload);
+bool handleSoundConfigCommand(const String& topic, const String& payload);
 
 void readAndPublishEnvironment();
 void publishDoorState(bool state);
@@ -283,6 +293,9 @@ void setup() {
     publishAutoDiscovery();
     publishPirConfigDiscovery();
     publishPirConfigState();
+    publishSoundConfigDiscovery();
+    publishSoundConfigState();
+    publishSoundState("clear", 0, 0, 0);
     publishBlePresence(true);
     // Publish initial door state at boot
     currentDoorState = digitalRead(PIN_DOOR);
@@ -396,6 +409,9 @@ void loadRuntimeConfigDefaults() {
   runtimeConfig.pirDetectStableMs = PIR_DETECT_STABLE_MS;
   runtimeConfig.pirClearStableMs = PIR_CLEAR_STABLE_MS;
   runtimeConfig.pirHoldMs = PIR_HOLD_MS;
+  runtimeConfig.soundSampleWindowMs = SOUND_SAMPLE_WINDOW_MS;
+  runtimeConfig.soundHoldMs = SOUND_HOLD_MS;
+  runtimeConfig.soundThresholdAdc = SOUND_THRESHOLD_ADC;
 }
 
 bool validateRuntimeConfig(const RuntimeConfig& cfg) {
@@ -408,7 +424,10 @@ bool validateRuntimeConfig(const RuntimeConfig& cfg) {
   if (cfg.pirWarmupMs > 300000 ||
       cfg.pirDetectStableMs < 10 || cfg.pirDetectStableMs > 10000 ||
       cfg.pirClearStableMs < 50 || cfg.pirClearStableMs > 60000 ||
-      cfg.pirHoldMs < 250 || cfg.pirHoldMs > 60000) {
+      cfg.pirHoldMs < 250 || cfg.pirHoldMs > 60000 ||
+      cfg.soundSampleWindowMs < 10 || cfg.soundSampleWindowMs > 1000 ||
+      cfg.soundHoldMs < 100 || cfg.soundHoldMs > 60000 ||
+      cfg.soundThresholdAdc < 10 || cfg.soundThresholdAdc > 4095) {
     return false;
   }
   if (!cfg.useStaticIp) {
@@ -467,6 +486,9 @@ void loadRuntimeConfig() {
   nvsConfig.pirDetectStableMs = prefs.getULong("pir_det", runtimeConfig.pirDetectStableMs);
   nvsConfig.pirClearStableMs = prefs.getULong("pir_clr", runtimeConfig.pirClearStableMs);
   nvsConfig.pirHoldMs = prefs.getULong("pir_hold", runtimeConfig.pirHoldMs);
+  nvsConfig.soundSampleWindowMs = prefs.getULong("snd_win", runtimeConfig.soundSampleWindowMs);
+  nvsConfig.soundHoldMs = prefs.getULong("snd_hold", runtimeConfig.soundHoldMs);
+  nvsConfig.soundThresholdAdc = prefs.getULong("snd_thr", runtimeConfig.soundThresholdAdc);
   prefs.end();
 
   if (!validateRuntimeConfig(nvsConfig)) {
@@ -512,6 +534,9 @@ bool saveRuntimeConfigToNvs() {
   prefs.putULong("pir_det", runtimeConfig.pirDetectStableMs);
   prefs.putULong("pir_clr", runtimeConfig.pirClearStableMs);
   prefs.putULong("pir_hold", runtimeConfig.pirHoldMs);
+  prefs.putULong("snd_win", runtimeConfig.soundSampleWindowMs);
+  prefs.putULong("snd_hold", runtimeConfig.soundHoldMs);
+  prefs.putULong("snd_thr", runtimeConfig.soundThresholdAdc);
   prefs.end();
 
   configLoadedFromNvs = true;
@@ -555,6 +580,9 @@ void printRuntimeConfig() {
   Serial.printf("  pir_detect_stable_ms=%lu\n", runtimeConfig.pirDetectStableMs);
   Serial.printf("  pir_clear_stable_ms=%lu\n", runtimeConfig.pirClearStableMs);
   Serial.printf("  pir_hold_ms=%lu\n", runtimeConfig.pirHoldMs);
+  Serial.printf("  sound_sample_window_ms=%lu\n", runtimeConfig.soundSampleWindowMs);
+  Serial.printf("  sound_hold_ms=%lu\n", runtimeConfig.soundHoldMs);
+  Serial.printf("  sound_threshold_adc=%lu\n", runtimeConfig.soundThresholdAdc);
 }
 
 bool parseBoolValue(const String& rawValue, bool& outValue) {
@@ -629,6 +657,12 @@ bool setRuntimeConfigValue(const String& key, const String& value) {
     if (!parseUnsigned(runtimeConfig.pirClearStableMs)) return false;
   } else if (key == "pir_hold_ms") {
     if (!parseUnsigned(runtimeConfig.pirHoldMs)) return false;
+  } else if (key == "sound_sample_window_ms") {
+    if (!parseUnsigned(runtimeConfig.soundSampleWindowMs)) return false;
+  } else if (key == "sound_hold_ms") {
+    if (!parseUnsigned(runtimeConfig.soundHoldMs)) return false;
+  } else if (key == "sound_threshold_adc") {
+    if (!parseUnsigned(runtimeConfig.soundThresholdAdc)) return false;
   } else {
     return false;
   }
@@ -668,6 +702,7 @@ void processSerialCommand(String line) {
     Serial.println(F("  wifi_ssid wifi_pass static_ip_enabled static_ip gateway subnet dns1 dns2"));
     Serial.println(F("  use_ntp tz ntp1 ntp2 ntp3 mqtt_server mqtt_port mqtt_user mqtt_pass"));
     Serial.println(F("  pir_warmup_ms pir_detect_stable_ms pir_clear_stable_ms pir_hold_ms"));
+    Serial.println(F("  sound_sample_window_ms sound_hold_ms sound_threshold_adc"));
     return;
   }
 
@@ -916,10 +951,16 @@ void reconnectMQTT() {
     String pirDetectSetTopic = topicBase + "/config/pir_detect_stable_ms/set";
     String pirClearSetTopic = topicBase + "/config/pir_clear_stable_ms/set";
     String pirHoldSetTopic = topicBase + "/config/pir_hold_ms/set";
+    String soundWindowSetTopic = topicBase + "/config/sound_sample_window_ms/set";
+    String soundHoldSetTopic = topicBase + "/config/sound_hold_ms/set";
+    String soundThresholdSetTopic = topicBase + "/config/sound_threshold_adc/set";
     mqttClient.subscribe(pirWarmupSetTopic.c_str());
     mqttClient.subscribe(pirDetectSetTopic.c_str());
     mqttClient.subscribe(pirClearSetTopic.c_str());
     mqttClient.subscribe(pirHoldSetTopic.c_str());
+    mqttClient.subscribe(soundWindowSetTopic.c_str());
+    mqttClient.subscribe(soundHoldSetTopic.c_str());
+    mqttClient.subscribe(soundThresholdSetTopic.c_str());
     blinkLED(2, 150);
   } else {
     Serial.printf("failed (rc=%d) — will retry in 5s\n", mqttClient.state());
@@ -938,6 +979,9 @@ void mqttMessageCallback(char* topic, byte* payload, unsigned int length) {
   payloadStr.trim();
 
   if (handlePirConfigCommand(topicStr, payloadStr)) {
+    return;
+  }
+  if (handleSoundConfigCommand(topicStr, payloadStr)) {
     return;
   }
 
@@ -978,6 +1022,39 @@ bool handlePirConfigCommand(const String& topic, const String& payload) {
 
   Serial.printf("[MQTT] Applied PIR config update: %s=%s\n", key.c_str(), payload.c_str());
   publishPirConfigState();
+  return true;
+}
+
+bool handleSoundConfigCommand(const String& topic, const String& payload) {
+  String key;
+
+  if (topic.endsWith("/config/sound_sample_window_ms/set")) {
+    key = "sound_sample_window_ms";
+  } else if (topic.endsWith("/config/sound_hold_ms/set")) {
+    key = "sound_hold_ms";
+  } else if (topic.endsWith("/config/sound_threshold_adc/set")) {
+    key = "sound_threshold_adc";
+  } else {
+    return false;
+  }
+
+  RuntimeConfig previousConfig = runtimeConfig;
+  if (!setRuntimeConfigValue(key, payload) || !validateRuntimeConfig(runtimeConfig)) {
+    runtimeConfig = previousConfig;
+    Serial.printf("[MQTT] Rejected sound config update: %s=%s\n", key.c_str(), payload.c_str());
+    publishSoundConfigState();
+    return true;
+  }
+
+  if (!saveRuntimeConfigToNvs()) {
+    runtimeConfig = previousConfig;
+    Serial.printf("[MQTT] Failed to persist sound config update: %s=%s\n", key.c_str(), payload.c_str());
+    publishSoundConfigState();
+    return true;
+  }
+
+  Serial.printf("[MQTT] Applied sound config update: %s=%s\n", key.c_str(), payload.c_str());
+  publishSoundConfigState();
   return true;
 }
 
@@ -1179,6 +1256,95 @@ void publishPirConfigState() {
   mqttPublish(detectTopic.c_str(), String(runtimeConfig.pirDetectStableMs).c_str(), true);
   mqttPublish(clearTopic.c_str(), String(runtimeConfig.pirClearStableMs).c_str(), true);
   mqttPublish(holdTopic.c_str(), String(runtimeConfig.pirHoldMs).c_str(), true);
+}
+
+void publishSoundConfigDiscovery() {
+  struct SoundNumberDiscovery {
+    const char* objectSuffix;
+    const char* name;
+    const char* key;
+    int minValue;
+    int maxValue;
+    int step;
+    const char* unit;
+    const char* icon;
+  };
+
+  SoundNumberDiscovery numbers[] = {
+    {"sound_sample_window_ms", "Sound Sample Window", "sound_sample_window_ms", 10, 1000, 10, "ms", "mdi:waveform"},
+    {"sound_hold_ms", "Sound Hold", "sound_hold_ms", 100, 60000, 100, "ms", "mdi:timer-outline"},
+    {"sound_threshold_adc", "Sound Threshold", "sound_threshold_adc", 10, 4095, 10, "adc", "mdi:microphone-alert"},
+  };
+
+  int numberCount = sizeof(numbers) / sizeof(numbers[0]);
+  for (int i = 0; i < numberCount; i++) {
+    SoundNumberDiscovery& number = numbers[i];
+    String configTopic = String("homeassistant/number/") + deviceID + "/" + number.objectSuffix + "/config";
+    String stateTopic = topicBase + "/config/" + number.key + "/state";
+    String commandTopic = topicBase + "/config/" + number.key + "/set";
+
+    StaticJsonDocument<768> doc;
+    doc["name"] = String("Sentinel ") + number.name;
+    doc["unique_id"] = deviceID + "_" + number.objectSuffix;
+    doc["state_topic"] = stateTopic;
+    doc["command_topic"] = commandTopic;
+    doc["min"] = number.minValue;
+    doc["max"] = number.maxValue;
+    doc["step"] = number.step;
+    doc["mode"] = "box";
+    doc["availability_topic"] = topicBase + "/status";
+    doc["payload_available"] = "online";
+    doc["payload_not_available"] = "offline";
+    if (number.unit) {
+      doc["unit_of_measurement"] = number.unit;
+    }
+    if (number.icon) {
+      doc["icon"] = number.icon;
+    }
+
+    JsonObject dev = doc.createNestedObject("device");
+    JsonArray ids = dev.createNestedArray("identifiers");
+    ids.add(deviceID);
+    dev["name"] = deviceName;
+    dev["manufacturer"] = "Sentinel DIY";
+    dev["model"] = "Sentinel Multi-Sensor v2";
+    dev["sw_version"] = "2.0.0";
+    dev["connections"].to<JsonArray>().add(serialized("[\"mac\",\"" + deviceMAC + "\"]"));
+
+    char payload[768];
+    serializeJson(doc, payload, sizeof(payload));
+    mqttClient.publish(configTopic.c_str(), payload, true);
+    delay(50);
+  }
+
+  Serial.printf("[DISCOVERY] Published %d sound config entities\n", numberCount);
+}
+
+void publishSoundConfigState() {
+  String windowTopic = topicBase + "/config/sound_sample_window_ms/state";
+  String holdTopic = topicBase + "/config/sound_hold_ms/state";
+  String thresholdTopic = topicBase + "/config/sound_threshold_adc/state";
+
+  mqttPublish(windowTopic.c_str(), String(runtimeConfig.soundSampleWindowMs).c_str(), true);
+  mqttPublish(holdTopic.c_str(), String(runtimeConfig.soundHoldMs).c_str(), true);
+  mqttPublish(thresholdTopic.c_str(), String(runtimeConfig.soundThresholdAdc).c_str(), true);
+}
+
+void publishSoundState(const char* intrusionState, int peakToPeak, int minSample, int maxSample) {
+  StaticJsonDocument<128> doc;
+  doc["intrusion"] = intrusionState;
+  doc["peak_adc"] = peakToPeak;
+  doc["peak_to_peak_adc"] = peakToPeak;
+  doc["min_adc"] = minSample;
+  doc["max_adc"] = maxSample;
+  doc["threshold_adc"] = runtimeConfig.soundThresholdAdc;
+  doc["timestamp"] = currentTimestampSeconds();
+
+  char payload[128];
+  serializeJson(doc, payload, sizeof(payload));
+
+  String topic = topicBase + "/sound";
+  mqttPublish(topic.c_str(), payload);
 }
 
 // ============================================================================
@@ -1407,32 +1573,38 @@ void checkMotion() {
 // ============================================================================
 
 void checkSound() {
-  unsigned long startMillis = millis();
-  int peakValue = 0;
-  int sample;
+  unsigned long now = millis();
 
-  // Sample analog sound sensor over the window period
-  while (millis() - startMillis < SOUND_SAMPLE_WINDOW) {
-    sample = analogRead(PIN_SOUND);
-    if (sample > peakValue) {
-      peakValue = sample;
+  if (soundIntrusionActive && now >= soundHoldUntil) {
+    soundIntrusionActive = false;
+    publishSoundState("clear", 0, 0, 0);
+    Serial.println(F("[SOUND] Intrusion CLEARED"));
+  }
+
+  unsigned long startMillis = millis();
+  int minSample = 4095;
+  int maxSample = 0;
+
+  while (millis() - startMillis < runtimeConfig.soundSampleWindowMs) {
+    int sample = analogRead(PIN_SOUND);
+    if (sample < minSample) {
+      minSample = sample;
+    }
+    if (sample > maxSample) {
+      maxSample = sample;
     }
   }
 
-  if (peakValue >= SOUND_THRESHOLD) {
-    StaticJsonDocument<96> doc;
-    doc["intrusion"]  = "detected";
-    doc["peak_adc"]   = peakValue;
-    doc["timestamp"]  = currentTimestampSeconds();
-
-    char payload[96];
-    serializeJson(doc, payload, sizeof(payload));
-
-    String topic = topicBase + "/sound";
-    mqttPublish(topic.c_str(), payload);
-
-    Serial.printf("[SOUND] Intrusion detected — peak ADC: %d\n", peakValue);
-    blinkLED(2, 50);
+  int peakToPeak = maxSample - minSample;
+  if (peakToPeak >= (int)runtimeConfig.soundThresholdAdc) {
+    soundHoldUntil = now + runtimeConfig.soundHoldMs;
+    if (!soundIntrusionActive) {
+      soundIntrusionActive = true;
+      publishSoundState("detected", peakToPeak, minSample, maxSample);
+      Serial.printf("[SOUND] Intrusion detected — p2p ADC: %d (min=%d max=%d threshold=%lu)\n",
+                    peakToPeak, minSample, maxSample, runtimeConfig.soundThresholdAdc);
+      blinkLED(2, 50);
+    }
   }
 }
 
