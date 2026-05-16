@@ -234,6 +234,7 @@ void processBleScanResult(BLEAdvertisedDevice advertisedDevice);
 void expireBleDevices(unsigned long nowMs);
 String buildBleActiveDeviceListJson();
 String buildBleActiveAddressCsv();
+String buildBleActiveSummary();
 void publishBlePresence(bool initialPublish = false);
 void publishDiagnostics();
 
@@ -937,7 +938,7 @@ void publishAutoDiscovery() {
     {"sensor", "ble_device_count", "BLE Devices",
       stateTopicBLE.c_str(), "{{ value_json.active_count }}", nullptr, nullptr, "mdi:bluetooth", nullptr, nullptr},
         {"sensor", "ble_active_devices", "BLE Active Devices",
-      stateTopicBLE.c_str(), "{{ value_json.active_device_addresses }}", nullptr, nullptr, "mdi:bluetooth-connect", nullptr, nullptr},
+      stateTopicBLE.c_str(), "{{ value_json.active_device_summary }}", nullptr, nullptr, "mdi:bluetooth-connect", nullptr, nullptr},
 
     // Diagnostics
     {"sensor", "uptime", "Uptime",
@@ -1437,6 +1438,40 @@ String buildBleActiveAddressCsv() {
   return addresses;
 }
 
+String buildBleActiveSummary() {
+  String summary;
+  size_t shown = 0;
+
+  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
+    if (!bleDevices[i].active) {
+      continue;
+    }
+
+    String candidate = summary;
+    if (shown > 0) {
+      candidate += ", ";
+    }
+    candidate += bleDevices[i].address;
+
+    if (candidate.length() > 180) {
+      break;
+    }
+
+    summary = candidate;
+    shown++;
+  }
+
+  if (bleActiveCount == 0) {
+    return "none";
+  }
+
+  if (shown < bleActiveCount) {
+    summary += " +" + String(bleActiveCount - shown) + " more";
+  }
+
+  return summary;
+}
+
 void publishBlePresence(bool initialPublish) {
   bleActiveCount = 0;
   for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
@@ -1447,9 +1482,11 @@ void publishBlePresence(bool initialPublish) {
 
   String activeList = buildBleActiveDeviceListJson();
   String activeCsv = buildBleActiveAddressCsv();
+  String activeSummary = buildBleActiveSummary();
   String payload = String("{\"active_count\":") + String(bleActiveCount) +
                    ",\"active_devices\":" + activeList +
                    ",\"active_device_addresses\":\"" + activeCsv + "\"" +
+                   ",\"active_device_summary\":\"" + activeSummary + "\"" +
                    ",\"new_devices\":" + String(bleNewCount) +
                    ",\"expired_devices\":" + String(bleExpiredCount) +
                    ",\"scan_duration_sec\":" + String(BLE_SCAN_DURATION_MS / 1000) +
@@ -1457,6 +1494,12 @@ void publishBlePresence(bool initialPublish) {
 
   String topic = topicBase + "/ble";
   mqttPublish(topic.c_str(), payload.c_str(), true);
+
+  String listTopic = topicBase + "/ble/list";
+  String listPayload = String("{\"active_count\":") + String(bleActiveCount) +
+                       ",\"devices\":" + activeList +
+                       ",\"timestamp\":" + String(currentTimestampSeconds()) + "}";
+  mqttPublish(listTopic.c_str(), listPayload.c_str(), true);
 
   if (initialPublish) {
     Serial.printf("[BLE] Initial presence publish — %u devices active\n", (unsigned)bleActiveCount);
