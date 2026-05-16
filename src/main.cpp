@@ -834,7 +834,7 @@ uint32_t currentTimestampSeconds() {
 
 void setupMQTT() {
   mqttClient.setServer(runtimeConfig.mqttServer.c_str(), runtimeConfig.mqttPort);
-  mqttClient.setBufferSize(1024);
+  mqttClient.setBufferSize(4096);
   mqttClient.setKeepAlive(60);
 }
 
@@ -869,7 +869,10 @@ void reconnectMQTT() {
 
 void mqttPublish(const char* topic, const char* payload, bool retained) {
   if (!mqttClient.connected()) return;
-  mqttClient.publish(topic, payload, retained);
+  if (!mqttClient.publish(topic, payload, retained)) {
+    Serial.printf("[MQTT] Publish failed — topic=%s bytes=%u retained=%s\n",
+                  topic, (unsigned)strlen(payload), retained ? "true" : "false");
+  }
 }
 
 // ============================================================================
