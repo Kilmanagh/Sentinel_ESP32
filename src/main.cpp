@@ -94,6 +94,9 @@ const char* MQTT_PASS     = "";         // leave blank if no auth
 #define INTERVAL_ENV        30000   // environmental readings every 30s
 #define INTERVAL_DIAG       60000   // diagnostics every 60s
 #define INTERVAL_BLE        120000  // BLE scan every 2 minutes
+#define BLE_SCAN_DURATION_MS 10000  // each BLE scan runs for 10s
+#define BLE_DEVICE_TIMEOUT_MS 150000 // remove device if unseen for about 2.5 minutes
+#define BLE_MAX_TRACKED_DEVICES 24   // cap tracked BLE devices to protect RAM
 #define SOUND_SAMPLE_WINDOW 100     // sound sampling window (ms)
 #define SOUND_THRESHOLD     1500    // Calibrated for MAX9814
 #define PIR_COOLDOWN        10000   // motion re-trigger cooldown (ms)
@@ -169,6 +172,20 @@ unsigned long pirLowSince    = 0;
 unsigned long pirHoldUntil   = 0;
 int          pirLastRawState = LOW;
 
+struct BleTrackedDevice {
+  bool active = false;
+  String address;
+  int rssi = 0;
+  unsigned long firstSeenMs = 0;
+  unsigned long lastSeenMs = 0;
+  bool seenThisScan = false;
+};
+
+BleTrackedDevice bleDevices[BLE_MAX_TRACKED_DEVICES];
+size_t bleActiveCount = 0;
+size_t bleNewCount = 0;
+size_t bleExpiredCount = 0;
+
 // Diagnostics counters
 unsigned long wifiReconnects = 0;
 unsigned long mqttReconnects = 0;
@@ -210,6 +227,14 @@ void checkMotion();
 void checkSound();
 void checkDoor();
 void runBLEScan();
+void resetBleScanMarks();
+int  findBleDeviceSlot(const String& address);
+int  allocateBleDeviceSlot();
+void processBleScanResult(BLEAdvertisedDevice advertisedDevice);
+void expireBleDevices(unsigned long nowMs);
+String buildBleActiveDeviceListJson();
+String buildBleActiveAddressCsv();
+void publishBlePresence(bool initialPublish = false);
 void publishDiagnostics();
 
 float  computeComfortIndex(float tempF, float humidity);
@@ -906,7 +931,9 @@ void publishAutoDiscovery() {
 
     // BLE
     {"sensor", "ble_device_count", "BLE Devices",
-     stateTopicBLE.c_str(), "{{ value_json.device_count }}", nullptr, nullptr, "mdi:bluetooth", nullptr, nullptr},
+      stateTopicBLE.c_str(), "{{ value_json.active_count }}", nullptr, nullptr, "mdi:bluetooth", nullptr, nullptr},
+        {"sensor", "ble_active_devices", "BLE Active Devices",
+      stateTopicBLE.c_str(), "{{ value_json.active_device_addresses }}", nullptr, nullptr, "mdi:bluetooth-connect", nullptr, nullptr},
 
     // Diagnostics
     {"sensor", "uptime", "Uptime",
@@ -1275,15 +1302,8 @@ void publishDoorState(bool state) {
 
 class SentinelBLECallbacks : public BLEAdvertisedDeviceCallbacks {
   public:
-    int deviceCount = 0;
-    String deviceList;
-
     void onResult(BLEAdvertisedDevice advertisedDevice) override {
-      deviceCount++;
-      if (deviceCount <= 20) {  // cap tracked devices
-        if (deviceList.length() > 0) deviceList += ",";
-        deviceList += "\"" + String(advertisedDevice.getAddress().toString().c_str()) + "\"";
-      }
+      processBleScanResult(advertisedDevice);
     }
 };
 
@@ -1296,26 +1316,166 @@ void setupBLE() {
   Serial.println(F("[BLE] Scanner initialized"));
 }
 
+void resetBleScanMarks() {
+  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
+    bleDevices[i].seenThisScan = false;
+  }
+  bleNewCount = 0;
+  bleExpiredCount = 0;
+}
+
+int findBleDeviceSlot(const String& address) {
+  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
+    if (bleDevices[i].active && bleDevices[i].address.equalsIgnoreCase(address)) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+int allocateBleDeviceSlot() {
+  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
+    if (!bleDevices[i].active) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+void processBleScanResult(BLEAdvertisedDevice advertisedDevice) {
+  String address = String(advertisedDevice.getAddress().toString().c_str());
+  int rssi = advertisedDevice.getRSSI();
+  unsigned long nowMs = millis();
+
+  int slot = findBleDeviceSlot(address);
+  bool isNewDevice = false;
+
+  if (slot < 0) {
+    slot = allocateBleDeviceSlot();
+    if (slot < 0) {
+      return; // table full; drop extra devices rather than fragment memory
+    }
+    bleDevices[slot].active = true;
+    bleDevices[slot].address = address;
+    bleDevices[slot].firstSeenMs = nowMs;
+    isNewDevice = true;
+    bleNewCount++;
+  }
+
+  bleDevices[slot].rssi = rssi;
+  bleDevices[slot].lastSeenMs = nowMs;
+  bleDevices[slot].seenThisScan = true;
+
+  if (isNewDevice) {
+    Serial.printf("[BLE] Present: %s RSSI:%d\n", address.c_str(), rssi);
+  }
+}
+
+void expireBleDevices(unsigned long nowMs) {
+  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
+    if (!bleDevices[i].active) {
+      continue;
+    }
+
+    if ((nowMs - bleDevices[i].lastSeenMs) > BLE_DEVICE_TIMEOUT_MS) {
+      Serial.printf("[BLE] Left: %s\n", bleDevices[i].address.c_str());
+      bleDevices[i].active = false;
+      bleDevices[i].address = "";
+      bleDevices[i].rssi = 0;
+      bleDevices[i].firstSeenMs = 0;
+      bleDevices[i].lastSeenMs = 0;
+      bleDevices[i].seenThisScan = false;
+      bleExpiredCount++;
+    }
+  }
+}
+
+String buildBleActiveDeviceListJson() {
+  String list = "[";
+  bool first = true;
+
+  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
+    if (!bleDevices[i].active) {
+      continue;
+    }
+
+    if (!first) {
+      list += ",";
+    }
+    first = false;
+
+    list += "{\"address\":\"" + bleDevices[i].address +
+            "\",\"rssi\":" + String(bleDevices[i].rssi) +
+            ",\"first_seen_ms\":" + String(bleDevices[i].firstSeenMs) +
+            ",\"last_seen_ms\":" + String(bleDevices[i].lastSeenMs) + "}";
+  }
+
+  list += "]";
+  return list;
+}
+
+String buildBleActiveAddressCsv() {
+  String addresses;
+  bool first = true;
+
+  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
+    if (!bleDevices[i].active) {
+      continue;
+    }
+
+    if (!first) {
+      addresses += ", ";
+    }
+    first = false;
+    addresses += bleDevices[i].address;
+  }
+
+  return addresses;
+}
+
+void publishBlePresence(bool initialPublish) {
+  bleActiveCount = 0;
+  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
+    if (bleDevices[i].active) {
+      bleActiveCount++;
+    }
+  }
+
+  String activeList = buildBleActiveDeviceListJson();
+  String activeCsv = buildBleActiveAddressCsv();
+  String payload = String("{\"active_count\":") + String(bleActiveCount) +
+                   ",\"active_devices\":" + activeList +
+                   ",\"active_device_addresses\":\"" + activeCsv + "\"" +
+                   ",\"new_devices\":" + String(bleNewCount) +
+                   ",\"expired_devices\":" + String(bleExpiredCount) +
+                   ",\"scan_duration_sec\":" + String(BLE_SCAN_DURATION_MS / 1000) +
+                   ",\"timestamp\":" + String(currentTimestampSeconds()) + "}";
+
+  String topic = topicBase + "/ble";
+  mqttPublish(topic.c_str(), payload.c_str(), true);
+
+  if (initialPublish) {
+    Serial.printf("[BLE] Initial presence publish — %u devices active\n", (unsigned)bleActiveCount);
+  } else {
+    Serial.printf("[BLE] Presence updated — %u active, %u new, %u expired\n",
+                  (unsigned)bleActiveCount, (unsigned)bleNewCount, (unsigned)bleExpiredCount);
+  }
+}
+
 void runBLEScan() {
   if (!pBLEScan) return;
 
   Serial.println(F("[BLE] Starting scan..."));
 
   SentinelBLECallbacks callbacks;
+  resetBleScanMarks();
   pBLEScan->setAdvertisedDeviceCallbacks(&callbacks, false);
-  BLEScanResults results = pBLEScan->start(10, false);  // 10-second scan
+  BLEScanResults results = pBLEScan->start(BLE_SCAN_DURATION_MS / 1000, false);  // 10-second scan
   pBLEScan->clearResults();
 
-  // Build JSON payload
-  String payload = "{\"device_count\":" + String(callbacks.deviceCount) +
-                   ",\"devices\":[" + callbacks.deviceList +
-                   "],\"scan_duration_sec\":10" +
-                   ",\"timestamp\":" + String(currentTimestampSeconds()) + "}";
+  expireBleDevices(millis());
 
-  String topic = topicBase + "/ble";
-  mqttPublish(topic.c_str(), payload.c_str());
-
-  Serial.printf("[BLE] Scan complete — %d devices found\n", callbacks.deviceCount);
+  publishBlePresence(false);
 }
 
 // ============================================================================
