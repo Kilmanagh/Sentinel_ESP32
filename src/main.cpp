@@ -98,6 +98,10 @@ const char* MQTT_PASS     = "";         // leave blank if no auth
 #define SOUND_THRESHOLD     1500    // Calibrated for MAX9814
 #define PIR_COOLDOWN        10000   // motion re-trigger cooldown (ms)
 #define DOOR_DEBOUNCE       50      // door switch debounce (ms)
+#define PIR_WARMUP_MS       30000   // AM312 settle time after power-up
+#define PIR_DETECT_STABLE_MS 150    // HIGH must stay stable this long before detection
+#define PIR_CLEAR_STABLE_MS 1500    // LOW must stay stable this long before clear
+#define PIR_HOLD_MS         5000    // keep motion latched this long after last HIGH
 
 // ============================================================================
 //  RUNTIME CONFIG (NVS + compile-time defaults)
@@ -159,6 +163,11 @@ bool     lastDoorState      = HIGH;
 bool     currentDoorState   = HIGH;
 unsigned long lastDoorChange = 0;
 bool     motionDetected     = false;
+unsigned long pirWarmupUntil = 0;
+unsigned long pirHighSince   = 0;
+unsigned long pirLowSince    = 0;
+unsigned long pirHoldUntil   = 0;
+int          pirLastRawState = LOW;
 
 // Diagnostics counters
 unsigned long wifiReconnects = 0;
@@ -1095,14 +1104,45 @@ String iaqLabel(int score) {
 
 void setupPIR() {
   pinMode(PIN_PIR, INPUT);
+  pirWarmupUntil = millis() + PIR_WARMUP_MS;
+  pirHighSince = 0;
+  pirLowSince = 0;
+  pirHoldUntil = 0;
+  pirLastRawState = digitalRead(PIN_PIR);
+  motionDetected = false;
   Serial.println(F("[PIR] Motion sensor initialized on GPIO 27"));
 }
 
 void checkMotion() {
-  int pirState = digitalRead(PIN_PIR);
   unsigned long now = millis();
-  if (pirState == HIGH && !motionDetected) {
-    if (now - lastMotionPub >= PIR_COOLDOWN) {
+  int pirState = digitalRead(PIN_PIR);
+
+  if (now < pirWarmupUntil) {
+    pirLastRawState = pirState;
+    pirHighSince = 0;
+    pirLowSince = 0;
+    motionDetected = false;
+    return;
+  }
+
+  if (pirState != pirLastRawState) {
+    pirLastRawState = pirState;
+    if (pirState == HIGH) {
+      pirHighSince = now;
+      pirLowSince = 0;
+    } else {
+      pirLowSince = now;
+      pirHighSince = 0;
+    }
+  }
+
+  if (pirState == HIGH) {
+    pirHoldUntil = now + PIR_HOLD_MS;
+
+    if (!motionDetected &&
+        pirHighSince > 0 &&
+        (now - pirHighSince) >= PIR_DETECT_STABLE_MS &&
+        (now - lastMotionPub) >= PIR_COOLDOWN) {
       motionDetected = true;
       lastMotionPub = now;
 
@@ -1119,7 +1159,13 @@ void checkMotion() {
       Serial.println(F("[PIR] Motion DETECTED"));
       blinkLED(1, 50);
     }
-  } else if (pirState == LOW && motionDetected) {
+    return;
+  }
+
+  if (motionDetected &&
+      pirLowSince > 0 &&
+      now >= pirHoldUntil &&
+      (now - pirLowSince) >= PIR_CLEAR_STABLE_MS) {
     motionDetected = false;
 
     StaticJsonDocument<64> doc;
