@@ -1,15 +1,16 @@
 # Sensor Adjustments
 
-This guide covers how to adjust the two user-tunable detection sensors in Sentinel:
+This guide covers how to adjust the user-tunable detection features in Sentinel:
 
 - PIR motion on GPIO 27 using the AM312 Mini PIR
 - Sound intrusion on GPIO 34 using the MAX9814 microphone board
+- BLE beacon watchlist presence tracking
 
 These settings are runtime-configurable, stored in NVS, and survive reboot.
 
 ## Where to Adjust
 
-You can adjust sensor settings in either of these ways:
+You can adjust settings in either of these ways:
 
 1. Home Assistant MQTT `number` entities
 2. Serial `cfg` commands over USB/serial monitor
@@ -35,6 +36,152 @@ To list all supported config keys:
 ```text
 cfg help
 ```
+
+## BLE Beacon Watchlist
+
+The old BLE snooper is gone. Sentinel now uses a fixed watchlist of up to 4 known beacons.
+
+This is intentionally lightweight:
+
+- passive BLE scan
+- no track-everything device table
+- no generic phone snooping
+- only configured iBeacon UUID/major/minor identifiers are matched
+
+This works best with dedicated iBeacon-compatible tags or apps that advertise a stable iBeacon identity. It is not recommended for phones unless you control the beacon app and keep its UUID/major/minor stable.
+
+### How the watchlist is stored
+
+Beacon slots are stored in ESP32 NVS inside the same runtime config namespace as the other settings.
+
+Each slot has:
+
+- a user label
+- an iBeacon UUID
+- an iBeacon major value
+- an iBeacon minor value
+
+The firmware currently supports 4 slots.
+
+### Home Assistant entities
+
+Presence entities:
+
+- `Sentinel BLE Beacons Present`
+- `Sentinel Beacon 1`
+- `Sentinel Beacon 2`
+- `Sentinel Beacon 3`
+- `Sentinel Beacon 4`
+
+Home Assistant config entities:
+
+- `Sentinel Beacon 1 Name`
+- `Sentinel Beacon 1 UUID`
+- `Sentinel Beacon 1 Major`
+- `Sentinel Beacon 1 Minor`
+- `Sentinel Beacon 2 Name`
+- `Sentinel Beacon 2 UUID`
+- `Sentinel Beacon 2 Major`
+- `Sentinel Beacon 2 Minor`
+- `Sentinel Beacon 3 Name`
+- `Sentinel Beacon 3 UUID`
+- `Sentinel Beacon 3 Major`
+- `Sentinel Beacon 3 Minor`
+- `Sentinel Beacon 4 Name`
+- `Sentinel Beacon 4 UUID`
+- `Sentinel Beacon 4 Major`
+- `Sentinel Beacon 4 Minor`
+
+### Serial config keys
+
+- `ble_beacon1_name`
+- `ble_beacon1_uuid`
+- `ble_beacon1_major`
+- `ble_beacon1_minor`
+- `ble_beacon2_name`
+- `ble_beacon2_uuid`
+- `ble_beacon2_major`
+- `ble_beacon2_minor`
+- `ble_beacon3_name`
+- `ble_beacon3_uuid`
+- `ble_beacon3_major`
+- `ble_beacon3_minor`
+- `ble_beacon4_name`
+- `ble_beacon4_uuid`
+- `ble_beacon4_major`
+- `ble_beacon4_minor`
+
+### Defaults
+
+- Slot names default to `Beacon 1` through `Beacon 4`
+- Slot UUIDs default to empty
+- Slot major/minor values default to `0`
+- Presence timeout is about 150 seconds
+
+### Home Assistant workflow
+
+1. Open the Sentinel device in Home Assistant.
+2. Find the `Sentinel Beacon X Name` text entity for the slot you want.
+3. Enter a friendly label such as `Keys`, `Backpack`, or `Dad Tag`.
+4. Enter the beacon UUID in `Sentinel Beacon X UUID`.
+5. Enter the beacon major in `Sentinel Beacon X Major`.
+6. Enter the beacon minor in `Sentinel Beacon X Minor`.
+7. The ESP32 validates, saves to NVS, republishes state, and starts watching that beacon identity.
+
+If you change the UUID, major, or minor, the watchlist updates immediately.
+
+If you change the name, Home Assistant may take a moment to reflect the updated label because HA can cache entity names, but the stored value on the device is still correct.
+
+### Accepted UUID formats
+
+These are accepted:
+
+- `12345678-1234-1234-1234-1234567890AB`
+- `123456781234123412341234567890AB`
+- `12345678 1234 1234 1234 1234567890AB`
+
+The firmware normalizes the UUID before storing it.
+
+Major and minor must each be in the range `0` to `65535`.
+
+### Clearing a slot
+
+To empty a slot in serial, set the UUID to `CLEAR`:
+
+```text
+cfg set ble_beacon1_uuid CLEAR
+cfg save
+cfg apply
+```
+
+This clears the UUID and resets the slot's major and minor to `0`.
+
+In Home Assistant, clearing the UUID text value should remove the slot from the watchlist if HA sends an empty string. If that is inconsistent in the UI, use serial with `CLEAR` for the most reliable reset.
+
+### Example serial setup
+
+```text
+cfg set ble_beacon1_name Keys
+cfg set ble_beacon1_uuid 12345678-1234-1234-1234-1234567890AB
+cfg set ble_beacon1_major 100
+cfg set ble_beacon1_minor 7
+cfg save
+cfg apply
+```
+
+### How presence works
+
+- If a configured beacon is seen during scans, its slot becomes `home`.
+- If it is not seen again for about 150 seconds, its slot becomes `away`.
+- Unconfigured slots are ignored.
+- A beacon only matches when UUID, major, and minor all match the configured slot.
+
+### Watchlist tuning notes
+
+- Use stable dedicated beacons instead of phones.
+- Keep the watchlist small and intentional.
+- If a beacon feels too slow to clear, that is the current timeout behavior, not a sensor bug.
+- If a beacon rarely appears, verify the UUID, major, and minor first before assuming radio problems.
 
 ## PIR Motion Sensor
 

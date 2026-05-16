@@ -13,7 +13,7 @@
  * - Indoor Air Quality (IAQ) Score
  * - PIR motion detection
  * - Sound-level intrusion detection
- * - BLE device scanning & presence tracking
+ * - BLE beacon watchlist presence tracking
  * - Door/window reed switch sensor (GPIO 32)
  * - Onboard diagnostics (uptime, heap, WiFi RSSI, reconnect counts)
  *
@@ -93,10 +93,10 @@ const char* MQTT_PASS     = "";         // leave blank if no auth
 
 #define INTERVAL_ENV        30000   // environmental readings every 30s
 #define INTERVAL_DIAG       60000   // diagnostics every 60s
-#define INTERVAL_BLE        120000  // BLE scan every 2 minutes
-#define BLE_SCAN_DURATION_MS 10000  // each BLE scan runs for 10s
-#define BLE_DEVICE_TIMEOUT_MS 150000 // remove device if unseen for about 2.5 minutes
-#define BLE_MAX_TRACKED_DEVICES 24   // cap tracked BLE devices to protect RAM
+#define INTERVAL_BLE         120000  // BLE scan every 2 minutes
+#define BLE_SCAN_DURATION_MS 10000   // each BLE scan runs for 10s
+#define BLE_PRESENCE_TIMEOUT_MS 150000 // mark a watched beacon away if unseen for about 2.5 minutes
+#define BLE_MAX_WATCH_BEACONS 4      // fixed-size watchlist keeps BLE lightweight
 #define SOUND_SAMPLE_WINDOW_MS 100  // sound sampling window (ms)
 #define SOUND_THRESHOLD_ADC   1200  // peak-to-peak ADC threshold for MAX9814
 #define SOUND_HOLD_MS         3000  // keep sound intrusion latched for HA
@@ -136,6 +136,10 @@ struct RuntimeConfig {
   unsigned long soundSampleWindowMs;
   unsigned long soundHoldMs;
   unsigned long soundThresholdAdc;
+  String bleBeaconNames[BLE_MAX_WATCH_BEACONS];
+  String bleBeaconUuids[BLE_MAX_WATCH_BEACONS];
+  unsigned long bleBeaconMajors[BLE_MAX_WATCH_BEACONS];
+  unsigned long bleBeaconMinors[BLE_MAX_WATCH_BEACONS];
 };
 
 // ============================================================================
@@ -151,7 +155,7 @@ Preferences prefs;
 RuntimeConfig runtimeConfig;
 bool configLoadedFromNvs = false;
 
-const uint16_t CONFIG_VERSION = 1;
+const uint16_t CONFIG_VERSION = 2;
 const char* CONFIG_NAMESPACE = "sentinel_cfg";
 
 // MAC-based identity
@@ -182,19 +186,9 @@ unsigned long pirHoldUntil   = 0;
 unsigned long soundHoldUntil = 0;
 int          pirLastRawState = LOW;
 
-struct BleTrackedDevice {
-  bool active = false;
-  String address;
-  int rssi = 0;
-  unsigned long firstSeenMs = 0;
-  unsigned long lastSeenMs = 0;
-  bool seenThisScan = false;
-};
-
-BleTrackedDevice bleDevices[BLE_MAX_TRACKED_DEVICES];
-size_t bleActiveCount = 0;
-size_t bleNewCount = 0;
-size_t bleExpiredCount = 0;
+bool beaconPresent[BLE_MAX_WATCH_BEACONS] = {false, false, false, false};
+int beaconRssi[BLE_MAX_WATCH_BEACONS] = {0, 0, 0, 0};
+unsigned long beaconLastSeenMs[BLE_MAX_WATCH_BEACONS] = {0, 0, 0, 0};
 
 // Diagnostics counters
 unsigned long wifiReconnects = 0;
@@ -234,10 +228,16 @@ void publishPirConfigDiscovery();
 void publishPirConfigState();
 void publishSoundConfigDiscovery();
 void publishSoundConfigState();
+void publishBeaconDiscovery();
+void publishBeaconState(bool initialPublish = false);
+void publishBeaconConfigDiscovery();
+void publishBeaconConfigState();
+void clearLegacyBleTopics();
 void publishSoundState(const char* intrusionState, int peakToPeak, int minSample, int maxSample);
 void mqttMessageCallback(char* topic, byte* payload, unsigned int length);
 bool handlePirConfigCommand(const String& topic, const String& payload);
 bool handleSoundConfigCommand(const String& topic, const String& payload);
+bool handleBeaconConfigCommand(const String& topic, const String& payload);
 
 void readAndPublishEnvironment();
 void publishDoorState(bool state);
@@ -245,15 +245,14 @@ void checkMotion();
 void checkSound();
 void checkDoor();
 void runBLEScan();
-void resetBleScanMarks();
-int  findBleDeviceSlot(const String& address);
-int  allocateBleDeviceSlot();
+bool normalizeUuid(const String& rawUuid, String& normalizedUuid);
+String defaultBeaconName(size_t index);
+String beaconDisplayName(size_t index);
+bool isBeaconConfigured(size_t index);
 void processBleScanResult(BLEAdvertisedDevice advertisedDevice);
-void expireBleDevices(unsigned long nowMs);
-String buildBleActiveDeviceListJson();
-String buildBleActiveAddressCsv();
-String buildBleActiveSummary();
-void publishBlePresence(bool initialPublish = false);
+bool parseIBeaconAdvertisement(BLEAdvertisedDevice advertisedDevice, String& uuid, uint16_t& major, uint16_t& minor);
+void processBeaconAdvertisement(const String& uuid, uint16_t major, uint16_t minor, int rssi);
+void expireBeaconPresence(unsigned long nowMs);
 void publishDiagnostics();
 
 float  computeComfortIndex(float tempF, float humidity);
@@ -290,13 +289,17 @@ void setup() {
   // Connect MQTT and publish auto-discovery
   reconnectMQTT();
   if (mqttClient.connected()) {
+    clearLegacyBleTopics();
     publishAutoDiscovery();
     publishPirConfigDiscovery();
     publishPirConfigState();
     publishSoundConfigDiscovery();
     publishSoundConfigState();
     publishSoundState("clear", 0, 0, 0);
-    publishBlePresence(true);
+    publishBeaconDiscovery();
+    publishBeaconConfigDiscovery();
+    publishBeaconConfigState();
+    publishBeaconState(true);
     // Publish initial door state at boot
     currentDoorState = digitalRead(PIN_DOOR);
     lastDoorState = currentDoorState;
@@ -346,7 +349,7 @@ void loop() {
   // Door state monitoring
   checkDoor();
 
-  // BLE presence scan
+  // BLE beacon watchlist scan
   if (now - lastBLEScan >= INTERVAL_BLE) {
     lastBLEScan = now;
     runBLEScan();
@@ -412,6 +415,12 @@ void loadRuntimeConfigDefaults() {
   runtimeConfig.soundSampleWindowMs = SOUND_SAMPLE_WINDOW_MS;
   runtimeConfig.soundHoldMs = SOUND_HOLD_MS;
   runtimeConfig.soundThresholdAdc = SOUND_THRESHOLD_ADC;
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    runtimeConfig.bleBeaconNames[i] = defaultBeaconName(i);
+    runtimeConfig.bleBeaconUuids[i] = "";
+    runtimeConfig.bleBeaconMajors[i] = 0;
+    runtimeConfig.bleBeaconMinors[i] = 0;
+  }
 }
 
 bool validateRuntimeConfig(const RuntimeConfig& cfg) {
@@ -429,6 +438,19 @@ bool validateRuntimeConfig(const RuntimeConfig& cfg) {
       cfg.soundHoldMs < 100 || cfg.soundHoldMs > 60000 ||
       cfg.soundThresholdAdc < 10 || cfg.soundThresholdAdc > 4095) {
     return false;
+  }
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    if (cfg.bleBeaconUuids[i].length() == 0) {
+      continue;
+    }
+
+    String normalizedUuid;
+    if (!normalizeUuid(cfg.bleBeaconUuids[i], normalizedUuid)) {
+      return false;
+    }
+    if (cfg.bleBeaconMajors[i] > 65535 || cfg.bleBeaconMinors[i] > 65535) {
+      return false;
+    }
   }
   if (!cfg.useStaticIp) {
     return true;
@@ -489,6 +511,20 @@ void loadRuntimeConfig() {
   nvsConfig.soundSampleWindowMs = prefs.getULong("snd_win", runtimeConfig.soundSampleWindowMs);
   nvsConfig.soundHoldMs = prefs.getULong("snd_hold", runtimeConfig.soundHoldMs);
   nvsConfig.soundThresholdAdc = prefs.getULong("snd_thr", runtimeConfig.soundThresholdAdc);
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    char nameKey[12];
+    char uuidKey[12];
+    char majorKey[12];
+    char minorKey[12];
+    snprintf(nameKey, sizeof(nameKey), "bcn%u_name", (unsigned)(i + 1));
+    snprintf(uuidKey, sizeof(uuidKey), "bcn%u_uuid", (unsigned)(i + 1));
+    snprintf(majorKey, sizeof(majorKey), "bcn%u_maj", (unsigned)(i + 1));
+    snprintf(minorKey, sizeof(minorKey), "bcn%u_min", (unsigned)(i + 1));
+    nvsConfig.bleBeaconNames[i] = prefs.getString(nameKey, runtimeConfig.bleBeaconNames[i]);
+    nvsConfig.bleBeaconUuids[i] = prefs.getString(uuidKey, runtimeConfig.bleBeaconUuids[i]);
+    nvsConfig.bleBeaconMajors[i] = prefs.getULong(majorKey, runtimeConfig.bleBeaconMajors[i]);
+    nvsConfig.bleBeaconMinors[i] = prefs.getULong(minorKey, runtimeConfig.bleBeaconMinors[i]);
+  }
   prefs.end();
 
   if (!validateRuntimeConfig(nvsConfig)) {
@@ -537,6 +573,20 @@ bool saveRuntimeConfigToNvs() {
   prefs.putULong("snd_win", runtimeConfig.soundSampleWindowMs);
   prefs.putULong("snd_hold", runtimeConfig.soundHoldMs);
   prefs.putULong("snd_thr", runtimeConfig.soundThresholdAdc);
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    char nameKey[12];
+    char uuidKey[12];
+    char majorKey[12];
+    char minorKey[12];
+    snprintf(nameKey, sizeof(nameKey), "bcn%u_name", (unsigned)(i + 1));
+    snprintf(uuidKey, sizeof(uuidKey), "bcn%u_uuid", (unsigned)(i + 1));
+    snprintf(majorKey, sizeof(majorKey), "bcn%u_maj", (unsigned)(i + 1));
+    snprintf(minorKey, sizeof(minorKey), "bcn%u_min", (unsigned)(i + 1));
+    prefs.putString(nameKey, runtimeConfig.bleBeaconNames[i]);
+    prefs.putString(uuidKey, runtimeConfig.bleBeaconUuids[i]);
+    prefs.putULong(majorKey, runtimeConfig.bleBeaconMajors[i]);
+    prefs.putULong(minorKey, runtimeConfig.bleBeaconMinors[i]);
+  }
   prefs.end();
 
   configLoadedFromNvs = true;
@@ -583,6 +633,56 @@ void printRuntimeConfig() {
   Serial.printf("  sound_sample_window_ms=%lu\n", runtimeConfig.soundSampleWindowMs);
   Serial.printf("  sound_hold_ms=%lu\n", runtimeConfig.soundHoldMs);
   Serial.printf("  sound_threshold_adc=%lu\n", runtimeConfig.soundThresholdAdc);
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    Serial.printf("  ble_beacon%u_name=%s\n", (unsigned)(i + 1), beaconDisplayName(i).c_str());
+    Serial.printf("  ble_beacon%u_uuid=%s\n", (unsigned)(i + 1), runtimeConfig.bleBeaconUuids[i].c_str());
+    Serial.printf("  ble_beacon%u_major=%lu\n", (unsigned)(i + 1), runtimeConfig.bleBeaconMajors[i]);
+    Serial.printf("  ble_beacon%u_minor=%lu\n", (unsigned)(i + 1), runtimeConfig.bleBeaconMinors[i]);
+  }
+}
+
+bool normalizeUuid(const String& rawUuid, String& normalizedUuid) {
+  String hexDigits;
+  hexDigits.reserve(32);
+
+  for (size_t i = 0; i < rawUuid.length(); i++) {
+    char c = rawUuid.charAt(i);
+    if (isHexadecimalDigit(c)) {
+      hexDigits += (char)toupper(c);
+    } else if (c == ':' || c == '-' || c == ' ') {
+      continue;
+    } else {
+      return false;
+    }
+  }
+
+  if (hexDigits.length() != 32) {
+    return false;
+  }
+
+  normalizedUuid = hexDigits.substring(0, 8) + "-" +
+                   hexDigits.substring(8, 12) + "-" +
+                   hexDigits.substring(12, 16) + "-" +
+                   hexDigits.substring(16, 20) + "-" +
+                   hexDigits.substring(20, 32);
+
+  return true;
+}
+
+String defaultBeaconName(size_t index) {
+  return String("Beacon ") + String(index + 1);
+}
+
+String beaconDisplayName(size_t index) {
+  if (runtimeConfig.bleBeaconNames[index].length() > 0) {
+    return runtimeConfig.bleBeaconNames[index];
+  }
+
+  return defaultBeaconName(index);
+}
+
+bool isBeaconConfigured(size_t index) {
+  return runtimeConfig.bleBeaconUuids[index].length() > 0;
 }
 
 bool parseBoolValue(const String& rawValue, bool& outValue) {
@@ -664,6 +764,49 @@ bool setRuntimeConfigValue(const String& key, const String& value) {
   } else if (key == "sound_threshold_adc") {
     if (!parseUnsigned(runtimeConfig.soundThresholdAdc)) return false;
   } else {
+    for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+      String nameKey = String("ble_beacon") + String(i + 1) + "_name";
+      String uuidKey = String("ble_beacon") + String(i + 1) + "_uuid";
+      String majorKey = String("ble_beacon") + String(i + 1) + "_major";
+      String minorKey = String("ble_beacon") + String(i + 1) + "_minor";
+
+      if (key == nameKey) {
+        runtimeConfig.bleBeaconNames[i] = value;
+        return true;
+      }
+
+      if (key == uuidKey) {
+        String normalizedUuid;
+        String trimmedValue = value;
+        trimmedValue.trim();
+        trimmedValue.toUpperCase();
+
+        if (trimmedValue == "CLEAR" || trimmedValue == "NONE" || trimmedValue == "-") {
+          runtimeConfig.bleBeaconUuids[i] = "";
+          runtimeConfig.bleBeaconMajors[i] = 0;
+          runtimeConfig.bleBeaconMinors[i] = 0;
+          return true;
+        }
+
+        if (!normalizeUuid(value, normalizedUuid)) {
+          return false;
+        }
+
+        runtimeConfig.bleBeaconUuids[i] = normalizedUuid;
+        return true;
+      }
+
+      if (key == majorKey) {
+        if (!parseUnsigned(runtimeConfig.bleBeaconMajors[i])) return false;
+        return true;
+      }
+
+      if (key == minorKey) {
+        if (!parseUnsigned(runtimeConfig.bleBeaconMinors[i])) return false;
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -681,8 +824,20 @@ void applyRuntimeConfigNow() {
   applyWiFiNetworkConfig();
   setupMQTT();
   setupPIR();
+  setupBLE();
   reconnectWiFi();
   reconnectMQTT();
+  if (mqttClient.connected()) {
+    clearLegacyBleTopics();
+    publishPirConfigDiscovery();
+    publishPirConfigState();
+    publishSoundConfigDiscovery();
+    publishSoundConfigState();
+    publishBeaconDiscovery();
+    publishBeaconConfigDiscovery();
+    publishBeaconConfigState();
+    publishBeaconState(true);
+  }
   Serial.println(F("[CONFIG] Applied runtime config to active services"));
 }
 
@@ -703,6 +858,11 @@ void processSerialCommand(String line) {
     Serial.println(F("  use_ntp tz ntp1 ntp2 ntp3 mqtt_server mqtt_port mqtt_user mqtt_pass"));
     Serial.println(F("  pir_warmup_ms pir_detect_stable_ms pir_clear_stable_ms pir_hold_ms"));
     Serial.println(F("  sound_sample_window_ms sound_hold_ms sound_threshold_adc"));
+    Serial.println(F("  ble_beacon1_name ble_beacon1_uuid ble_beacon1_major ble_beacon1_minor"));
+    Serial.println(F("  ble_beacon2_name ble_beacon2_uuid ble_beacon2_major ble_beacon2_minor"));
+    Serial.println(F("  ble_beacon3_name ble_beacon3_uuid ble_beacon3_major ble_beacon3_minor"));
+    Serial.println(F("  ble_beacon4_name ble_beacon4_uuid ble_beacon4_major ble_beacon4_minor"));
+    Serial.println(F("  Use value CLEAR for ble_beacon*_uuid to empty a slot"));
     return;
   }
 
@@ -961,6 +1121,16 @@ void reconnectMQTT() {
     mqttClient.subscribe(soundWindowSetTopic.c_str());
     mqttClient.subscribe(soundHoldSetTopic.c_str());
     mqttClient.subscribe(soundThresholdSetTopic.c_str());
+    for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+      String beaconNameSetTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_name/set";
+      String beaconUuidSetTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_uuid/set";
+      String beaconMajorSetTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_major/set";
+      String beaconMinorSetTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_minor/set";
+      mqttClient.subscribe(beaconNameSetTopic.c_str());
+      mqttClient.subscribe(beaconUuidSetTopic.c_str());
+      mqttClient.subscribe(beaconMajorSetTopic.c_str());
+      mqttClient.subscribe(beaconMinorSetTopic.c_str());
+    }
     blinkLED(2, 150);
   } else {
     Serial.printf("failed (rc=%d) — will retry in 5s\n", mqttClient.state());
@@ -982,6 +1152,9 @@ void mqttMessageCallback(char* topic, byte* payload, unsigned int length) {
     return;
   }
   if (handleSoundConfigCommand(topicStr, payloadStr)) {
+    return;
+  }
+  if (handleBeaconConfigCommand(topicStr, payloadStr)) {
     return;
   }
 
@@ -1058,6 +1231,63 @@ bool handleSoundConfigCommand(const String& topic, const String& payload) {
   return true;
 }
 
+bool handleBeaconConfigCommand(const String& topic, const String& payload) {
+  String key;
+
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    String nameTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_name/set";
+    String uuidTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_uuid/set";
+    String majorTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_major/set";
+    String minorTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_minor/set";
+
+    if (topic == nameTopic) {
+      key = String("ble_beacon") + String(i + 1) + "_name";
+      break;
+    }
+    if (topic == uuidTopic) {
+      key = String("ble_beacon") + String(i + 1) + "_uuid";
+      break;
+    }
+    if (topic == majorTopic) {
+      key = String("ble_beacon") + String(i + 1) + "_major";
+      break;
+    }
+    if (topic == minorTopic) {
+      key = String("ble_beacon") + String(i + 1) + "_minor";
+      break;
+    }
+  }
+
+  if (key.length() == 0) {
+    return false;
+  }
+
+  RuntimeConfig previousConfig = runtimeConfig;
+  if (!setRuntimeConfigValue(key, payload) || !validateRuntimeConfig(runtimeConfig)) {
+    runtimeConfig = previousConfig;
+    Serial.printf("[MQTT] Rejected beacon config update: %s=%s\n", key.c_str(), payload.c_str());
+    publishBeaconConfigState();
+    publishBeaconState(true);
+    return true;
+  }
+
+  if (!saveRuntimeConfigToNvs()) {
+    runtimeConfig = previousConfig;
+    Serial.printf("[MQTT] Failed to persist beacon config update: %s=%s\n", key.c_str(), payload.c_str());
+    publishBeaconConfigState();
+    publishBeaconState(true);
+    return true;
+  }
+
+  setupBLE();
+  publishBeaconDiscovery();
+  publishBeaconConfigDiscovery();
+  publishBeaconConfigState();
+  publishBeaconState(true);
+  Serial.printf("[MQTT] Applied beacon config update: %s=%s\n", key.c_str(), payload.c_str());
+  return true;
+}
+
 void mqttPublish(const char* topic, const char* payload, bool retained) {
   if (!mqttClient.connected()) return;
   if (!mqttClient.publish(topic, payload, retained)) {
@@ -1090,7 +1320,6 @@ void publishAutoDiscovery() {
   String stateTopicMotion = topicBase + "/motion";
   String stateTopicSound = topicBase + "/sound";
   String stateTopicDoor  = topicBase + "/door";
-  String stateTopicBLE   = topicBase + "/ble";
   String stateTopicDiag  = topicBase + "/diagnostics";
 
   DiscoveryEntity entities[] = {
@@ -1123,12 +1352,6 @@ void publishAutoDiscovery() {
     // Door
     {"binary_sensor", "door", "Door",
      stateTopicDoor.c_str(), "{{ value_json.state }}", "door", nullptr, nullptr, "OPEN", "CLOSED"},
-
-    // BLE
-    {"sensor", "ble_device_count", "BLE Devices",
-      stateTopicBLE.c_str(), "{{ value_json.active_count }}", nullptr, nullptr, "mdi:bluetooth", nullptr, nullptr},
-        {"sensor", "ble_active_devices", "BLE Active Devices",
-      stateTopicBLE.c_str(), "{{ value_json.active_device_summary }}", nullptr, nullptr, "mdi:bluetooth-connect", nullptr, nullptr},
 
     // Diagnostics
     {"sensor", "uptime", "Uptime",
@@ -1328,6 +1551,297 @@ void publishSoundConfigState() {
   mqttPublish(windowTopic.c_str(), String(runtimeConfig.soundSampleWindowMs).c_str(), true);
   mqttPublish(holdTopic.c_str(), String(runtimeConfig.soundHoldMs).c_str(), true);
   mqttPublish(thresholdTopic.c_str(), String(runtimeConfig.soundThresholdAdc).c_str(), true);
+}
+
+void clearLegacyBleTopics() {
+  const char* legacyDiscoveryTopics[] = {
+    "homeassistant/sensor/%s/ble_device_count/config",
+    "homeassistant/sensor/%s/ble_active_devices/config"
+  };
+
+  for (size_t i = 0; i < sizeof(legacyDiscoveryTopics) / sizeof(legacyDiscoveryTopics[0]); i++) {
+    char topic[128];
+    snprintf(topic, sizeof(topic), legacyDiscoveryTopics[i], deviceID.c_str());
+    mqttClient.publish(topic, "", true);
+    delay(20);
+  }
+
+  String legacyBleTopic = topicBase + "/ble";
+  String legacyBleListTopic = topicBase + "/ble/list";
+  mqttClient.publish(legacyBleTopic.c_str(), "", true);
+  mqttClient.publish(legacyBleListTopic.c_str(), "", true);
+
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    String legacyConfigTopic = String("homeassistant/text/") + deviceID + "/ble_beacon" + String(i + 1) + "_addr/config";
+    String legacyStateTopic = topicBase + "/config/ble_beacon" + String(i + 1) + "_addr/state";
+    mqttClient.publish(legacyConfigTopic.c_str(), "", true);
+    mqttClient.publish(legacyStateTopic.c_str(), "", true);
+  }
+}
+
+void publishBeaconDiscovery() {
+  String stateTopic = topicBase + "/beacons";
+
+  {
+    String configTopic = String("homeassistant/sensor/") + deviceID + "/ble_beacons_present/config";
+
+    StaticJsonDocument<768> doc;
+    doc["name"] = "Sentinel BLE Beacons Present";
+    doc["unique_id"] = deviceID + "_ble_beacons_present";
+    doc["state_topic"] = stateTopic;
+    doc["value_template"] = "{{ value_json.present_count }}";
+    doc["icon"] = "mdi:bluetooth";
+    doc["availability_topic"] = topicBase + "/status";
+    doc["payload_available"] = "online";
+    doc["payload_not_available"] = "offline";
+
+    JsonObject dev = doc.createNestedObject("device");
+    JsonArray ids = dev.createNestedArray("identifiers");
+    ids.add(deviceID);
+    dev["name"] = deviceName;
+    dev["manufacturer"] = "Sentinel DIY";
+    dev["model"] = "Sentinel Multi-Sensor v2";
+    dev["sw_version"] = "2.0.0";
+    dev["connections"].to<JsonArray>().add(serialized("[\"mac\",\"" + deviceMAC + "\"]"));
+
+    char payload[768];
+    serializeJson(doc, payload, sizeof(payload));
+    mqttClient.publish(configTopic.c_str(), payload, true);
+    delay(50);
+  }
+
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    String configTopic = String("homeassistant/binary_sensor/") + deviceID + "/ble_beacon_" + String(i + 1) + "/config";
+    String valueTemplate = String("{{ value_json.beacon") + String(i + 1) + "_present }}";
+
+    StaticJsonDocument<768> doc;
+    doc["name"] = String("Sentinel ") + beaconDisplayName(i);
+    doc["unique_id"] = deviceID + "_ble_beacon_" + String(i + 1);
+    doc["state_topic"] = stateTopic;
+    doc["value_template"] = valueTemplate;
+    doc["payload_on"] = "home";
+    doc["payload_off"] = "away";
+    doc["device_class"] = "presence";
+    doc["icon"] = "mdi:bluetooth-connect";
+    doc["availability_topic"] = topicBase + "/status";
+    doc["payload_available"] = "online";
+    doc["payload_not_available"] = "offline";
+
+    JsonObject dev = doc.createNestedObject("device");
+    JsonArray ids = dev.createNestedArray("identifiers");
+    ids.add(deviceID);
+    dev["name"] = deviceName;
+    dev["manufacturer"] = "Sentinel DIY";
+    dev["model"] = "Sentinel Multi-Sensor v2";
+    dev["sw_version"] = "2.0.0";
+    dev["connections"].to<JsonArray>().add(serialized("[\"mac\",\"" + deviceMAC + "\"]"));
+
+    char payload[768];
+    serializeJson(doc, payload, sizeof(payload));
+    mqttClient.publish(configTopic.c_str(), payload, true);
+    delay(50);
+  }
+
+  Serial.printf("[BLE] Published watchlist discovery for %u beacon slots\n", (unsigned)BLE_MAX_WATCH_BEACONS);
+}
+
+void publishBeaconConfigDiscovery() {
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    String baseKey = String("ble_beacon") + String(i + 1);
+
+    {
+      String configTopic = String("homeassistant/text/") + deviceID + "/" + baseKey + "_name/config";
+      String stateTopic = topicBase + "/config/" + baseKey + "_name/state";
+      String commandTopic = topicBase + "/config/" + baseKey + "_name/set";
+
+      StaticJsonDocument<768> doc;
+      doc["name"] = String("Sentinel Beacon ") + String(i + 1) + " Name";
+      doc["unique_id"] = deviceID + "_" + baseKey + "_name";
+      doc["state_topic"] = stateTopic;
+      doc["command_topic"] = commandTopic;
+      doc["icon"] = "mdi:tag-text";
+      doc["entity_category"] = "config";
+      doc["availability_topic"] = topicBase + "/status";
+      doc["payload_available"] = "online";
+      doc["payload_not_available"] = "offline";
+
+      JsonObject dev = doc.createNestedObject("device");
+      JsonArray ids = dev.createNestedArray("identifiers");
+      ids.add(deviceID);
+      dev["name"] = deviceName;
+      dev["manufacturer"] = "Sentinel DIY";
+      dev["model"] = "Sentinel Multi-Sensor v2";
+      dev["sw_version"] = "2.0.0";
+      dev["connections"].to<JsonArray>().add(serialized("[\"mac\",\"" + deviceMAC + "\"]"));
+
+      char payload[768];
+      serializeJson(doc, payload, sizeof(payload));
+      mqttClient.publish(configTopic.c_str(), payload, true);
+      delay(50);
+    }
+
+    {
+      String configTopic = String("homeassistant/text/") + deviceID + "/" + baseKey + "_uuid/config";
+      String stateTopic = topicBase + "/config/" + baseKey + "_uuid/state";
+      String commandTopic = topicBase + "/config/" + baseKey + "_uuid/set";
+
+      StaticJsonDocument<768> doc;
+      doc["name"] = String("Sentinel Beacon ") + String(i + 1) + " UUID";
+      doc["unique_id"] = deviceID + "_" + baseKey + "_uuid";
+      doc["state_topic"] = stateTopic;
+      doc["command_topic"] = commandTopic;
+      doc["icon"] = "mdi:bluetooth-settings";
+      doc["entity_category"] = "config";
+      doc["availability_topic"] = topicBase + "/status";
+      doc["payload_available"] = "online";
+      doc["payload_not_available"] = "offline";
+
+      JsonObject dev = doc.createNestedObject("device");
+      JsonArray ids = dev.createNestedArray("identifiers");
+      ids.add(deviceID);
+      dev["name"] = deviceName;
+      dev["manufacturer"] = "Sentinel DIY";
+      dev["model"] = "Sentinel Multi-Sensor v2";
+      dev["sw_version"] = "2.0.0";
+      dev["connections"].to<JsonArray>().add(serialized("[\"mac\",\"" + deviceMAC + "\"]"));
+
+      char payload[768];
+      serializeJson(doc, payload, sizeof(payload));
+      mqttClient.publish(configTopic.c_str(), payload, true);
+      delay(50);
+    }
+
+    {
+      String configTopic = String("homeassistant/number/") + deviceID + "/" + baseKey + "_major/config";
+      String stateTopic = topicBase + "/config/" + baseKey + "_major/state";
+      String commandTopic = topicBase + "/config/" + baseKey + "_major/set";
+
+      StaticJsonDocument<768> doc;
+      doc["name"] = String("Sentinel Beacon ") + String(i + 1) + " Major";
+      doc["unique_id"] = deviceID + "_" + baseKey + "_major";
+      doc["state_topic"] = stateTopic;
+      doc["command_topic"] = commandTopic;
+      doc["min"] = 0;
+      doc["max"] = 65535;
+      doc["step"] = 1;
+      doc["mode"] = "box";
+      doc["icon"] = "mdi:numeric";
+      doc["entity_category"] = "config";
+      doc["availability_topic"] = topicBase + "/status";
+      doc["payload_available"] = "online";
+      doc["payload_not_available"] = "offline";
+
+      JsonObject dev = doc.createNestedObject("device");
+      JsonArray ids = dev.createNestedArray("identifiers");
+      ids.add(deviceID);
+      dev["name"] = deviceName;
+      dev["manufacturer"] = "Sentinel DIY";
+      dev["model"] = "Sentinel Multi-Sensor v2";
+      dev["sw_version"] = "2.0.0";
+      dev["connections"].to<JsonArray>().add(serialized("[\"mac\",\"" + deviceMAC + "\"]"));
+
+      char payload[768];
+      serializeJson(doc, payload, sizeof(payload));
+      mqttClient.publish(configTopic.c_str(), payload, true);
+      delay(50);
+    }
+
+    {
+      String configTopic = String("homeassistant/number/") + deviceID + "/" + baseKey + "_minor/config";
+      String stateTopic = topicBase + "/config/" + baseKey + "_minor/state";
+      String commandTopic = topicBase + "/config/" + baseKey + "_minor/set";
+
+      StaticJsonDocument<768> doc;
+      doc["name"] = String("Sentinel Beacon ") + String(i + 1) + " Minor";
+      doc["unique_id"] = deviceID + "_" + baseKey + "_minor";
+      doc["state_topic"] = stateTopic;
+      doc["command_topic"] = commandTopic;
+      doc["min"] = 0;
+      doc["max"] = 65535;
+      doc["step"] = 1;
+      doc["mode"] = "box";
+      doc["icon"] = "mdi:numeric";
+      doc["entity_category"] = "config";
+      doc["availability_topic"] = topicBase + "/status";
+      doc["payload_available"] = "online";
+      doc["payload_not_available"] = "offline";
+
+      JsonObject dev = doc.createNestedObject("device");
+      JsonArray ids = dev.createNestedArray("identifiers");
+      ids.add(deviceID);
+      dev["name"] = deviceName;
+      dev["manufacturer"] = "Sentinel DIY";
+      dev["model"] = "Sentinel Multi-Sensor v2";
+      dev["sw_version"] = "2.0.0";
+      dev["connections"].to<JsonArray>().add(serialized("[\"mac\",\"" + deviceMAC + "\"]"));
+
+      char payload[768];
+      serializeJson(doc, payload, sizeof(payload));
+      mqttClient.publish(configTopic.c_str(), payload, true);
+      delay(50);
+    }
+  }
+
+  Serial.printf("[BLE] Published %u beacon config entities\n", (unsigned)(BLE_MAX_WATCH_BEACONS * 4));
+}
+
+void publishBeaconConfigState() {
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    String baseKey = String("ble_beacon") + String(i + 1);
+    String nameTopic = topicBase + "/config/" + baseKey + "_name/state";
+    String uuidTopic = topicBase + "/config/" + baseKey + "_uuid/state";
+    String majorTopic = topicBase + "/config/" + baseKey + "_major/state";
+    String minorTopic = topicBase + "/config/" + baseKey + "_minor/state";
+
+    mqttPublish(nameTopic.c_str(), beaconDisplayName(i).c_str(), true);
+    mqttPublish(uuidTopic.c_str(), runtimeConfig.bleBeaconUuids[i].c_str(), true);
+    mqttPublish(majorTopic.c_str(), String(runtimeConfig.bleBeaconMajors[i]).c_str(), true);
+    mqttPublish(minorTopic.c_str(), String(runtimeConfig.bleBeaconMinors[i]).c_str(), true);
+  }
+}
+
+void publishBeaconState(bool initialPublish) {
+  size_t configuredCount = 0;
+  size_t presentCount = 0;
+  StaticJsonDocument<768> doc;
+
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    String prefix = String("beacon") + String(i + 1);
+    bool configured = isBeaconConfigured(i);
+    String presentState = configured ? (beaconPresent[i] ? "home" : "away") : "unconfigured";
+
+    doc[prefix + "_name"] = beaconDisplayName(i);
+    doc[prefix + "_uuid"] = runtimeConfig.bleBeaconUuids[i];
+    doc[prefix + "_major"] = runtimeConfig.bleBeaconMajors[i];
+    doc[prefix + "_minor"] = runtimeConfig.bleBeaconMinors[i];
+    doc[prefix + "_present"] = presentState;
+    doc[prefix + "_rssi"] = beaconPresent[i] ? beaconRssi[i] : 0;
+
+    if (configured) {
+      configuredCount++;
+      if (beaconPresent[i]) {
+        presentCount++;
+      }
+    }
+  }
+
+  doc["configured_count"] = configuredCount;
+  doc["present_count"] = presentCount;
+  doc["timestamp"] = currentTimestampSeconds();
+
+  char payload[768];
+  serializeJson(doc, payload, sizeof(payload));
+
+  String topic = topicBase + "/beacons";
+  mqttPublish(topic.c_str(), payload, true);
+
+  if (initialPublish) {
+    Serial.printf("[BLE] Initial beacon watchlist publish — %u configured, %u present\n",
+                  (unsigned)configuredCount, (unsigned)presentCount);
+  } else {
+    Serial.printf("[BLE] Beacon watchlist updated — %u configured, %u present\n",
+                  (unsigned)configuredCount, (unsigned)presentCount);
+  }
 }
 
 void publishSoundState(const char* intrusionState, int peakToPeak, int minSample, int maxSample) {
@@ -1662,7 +2176,7 @@ void publishDoorState(bool state) {
 }
 
 // ============================================================================
-//  BLE — Bluetooth Low Energy Scanning
+//  BLE — Beacon Watchlist Scanning
 // ============================================================================
 
 class SentinelBLECallbacks : public BLEAdvertisedDeviceCallbacks {
@@ -1673,216 +2187,132 @@ class SentinelBLECallbacks : public BLEAdvertisedDeviceCallbacks {
 };
 
 void setupBLE() {
-  BLEDevice::init("");
-  pBLEScan = BLEDevice::getScan();
-  pBLEScan->setActiveScan(true);
-  pBLEScan->setInterval(100);
-  pBLEScan->setWindow(80);
-  Serial.println(F("[BLE] Scanner initialized"));
-}
-
-void resetBleScanMarks() {
-  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
-    bleDevices[i].seenThisScan = false;
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    beaconPresent[i] = false;
+    beaconRssi[i] = 0;
+    beaconLastSeenMs[i] = 0;
   }
-  bleNewCount = 0;
-  bleExpiredCount = 0;
-}
 
-int findBleDeviceSlot(const String& address) {
-  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
-    if (bleDevices[i].active && bleDevices[i].address.equalsIgnoreCase(address)) {
-      return (int)i;
-    }
+  if (!pBLEScan) {
+    BLEDevice::init("");
+    pBLEScan = BLEDevice::getScan();
   }
-  return -1;
-}
 
-int allocateBleDeviceSlot() {
-  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
-    if (!bleDevices[i].active) {
-      return (int)i;
-    }
+  if (pBLEScan) {
+    pBLEScan->setActiveScan(false);
+    pBLEScan->setInterval(160);
+    pBLEScan->setWindow(80);
   }
-  return -1;
+
+  Serial.println(F("[BLE] Watchlist scanner initialized"));
 }
 
 void processBleScanResult(BLEAdvertisedDevice advertisedDevice) {
-  String address = String(advertisedDevice.getAddress().toString().c_str());
-  int rssi = advertisedDevice.getRSSI();
+  String uuid;
+  uint16_t major = 0;
+  uint16_t minor = 0;
+
+  if (!parseIBeaconAdvertisement(advertisedDevice, uuid, major, minor)) {
+    return;
+  }
+
+  processBeaconAdvertisement(uuid, major, minor, advertisedDevice.getRSSI());
+}
+
+bool parseIBeaconAdvertisement(BLEAdvertisedDevice advertisedDevice, String& uuid, uint16_t& major, uint16_t& minor) {
+  std::string manufacturerData = advertisedDevice.getManufacturerData();
+  if (manufacturerData.length() < 25) {
+    return false;
+  }
+
+  const uint8_t* data = (const uint8_t*)manufacturerData.data();
+  if (data[0] != 0x4C || data[1] != 0x00 || data[2] != 0x02 || data[3] != 0x15) {
+    return false;
+  }
+
+  char uuidBuffer[37];
+  snprintf(uuidBuffer, sizeof(uuidBuffer),
+           "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+           data[4], data[5], data[6], data[7],
+           data[8], data[9],
+           data[10], data[11],
+           data[12], data[13],
+           data[14], data[15], data[16], data[17], data[18], data[19]);
+  uuid = String(uuidBuffer);
+  major = ((uint16_t)data[20] << 8) | data[21];
+  minor = ((uint16_t)data[22] << 8) | data[23];
+  return true;
+}
+
+void processBeaconAdvertisement(const String& uuid, uint16_t major, uint16_t minor, int rssi) {
   unsigned long nowMs = millis();
 
-  int slot = findBleDeviceSlot(address);
-  bool isNewDevice = false;
-
-  if (slot < 0) {
-    slot = allocateBleDeviceSlot();
-    if (slot < 0) {
-      return; // table full; drop extra devices rather than fragment memory
-    }
-    bleDevices[slot].active = true;
-    bleDevices[slot].address = address;
-    bleDevices[slot].firstSeenMs = nowMs;
-    isNewDevice = true;
-    bleNewCount++;
-  }
-
-  bleDevices[slot].rssi = rssi;
-  bleDevices[slot].lastSeenMs = nowMs;
-  bleDevices[slot].seenThisScan = true;
-
-  if (isNewDevice) {
-    Serial.printf("[BLE] Present: %s RSSI:%d\n", address.c_str(), rssi);
-  }
-}
-
-void expireBleDevices(unsigned long nowMs) {
-  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
-    if (!bleDevices[i].active) {
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    if (!isBeaconConfigured(i)) {
       continue;
     }
 
-    if ((nowMs - bleDevices[i].lastSeenMs) > BLE_DEVICE_TIMEOUT_MS) {
-      Serial.printf("[BLE] Left: %s\n", bleDevices[i].address.c_str());
-      bleDevices[i].active = false;
-      bleDevices[i].address = "";
-      bleDevices[i].rssi = 0;
-      bleDevices[i].firstSeenMs = 0;
-      bleDevices[i].lastSeenMs = 0;
-      bleDevices[i].seenThisScan = false;
-      bleExpiredCount++;
+    if (runtimeConfig.bleBeaconUuids[i].equalsIgnoreCase(uuid) &&
+        runtimeConfig.bleBeaconMajors[i] == major &&
+        runtimeConfig.bleBeaconMinors[i] == minor) {
+      bool wasPresent = beaconPresent[i];
+      beaconPresent[i] = true;
+      beaconRssi[i] = rssi;
+      beaconLastSeenMs[i] = nowMs;
+
+      if (!wasPresent) {
+        Serial.printf("[BLE] Beacon %s arrived (%s %u/%u) RSSI:%d\n",
+                      beaconDisplayName(i).c_str(), uuid.c_str(), (unsigned)major, (unsigned)minor, rssi);
+      }
+      return;
     }
   }
 }
 
-String buildBleActiveDeviceListJson() {
-  String list = "[";
-  bool first = true;
-
-  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
-    if (!bleDevices[i].active) {
+void expireBeaconPresence(unsigned long nowMs) {
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    if (!isBeaconConfigured(i)) {
+      beaconPresent[i] = false;
+      beaconRssi[i] = 0;
+      beaconLastSeenMs[i] = 0;
       continue;
     }
 
-    if (!first) {
-      list += ",";
+    if (beaconPresent[i] && (nowMs - beaconLastSeenMs[i]) > BLE_PRESENCE_TIMEOUT_MS) {
+      beaconPresent[i] = false;
+      beaconRssi[i] = 0;
+      Serial.printf("[BLE] Beacon %s left (%s %lu/%lu)\n",
+                    beaconDisplayName(i).c_str(), runtimeConfig.bleBeaconUuids[i].c_str(),
+                    runtimeConfig.bleBeaconMajors[i], runtimeConfig.bleBeaconMinors[i]);
     }
-    first = false;
-
-    list += "{\"address\":\"" + bleDevices[i].address +
-            "\",\"rssi\":" + String(bleDevices[i].rssi) +
-            ",\"first_seen_ms\":" + String(bleDevices[i].firstSeenMs) +
-            ",\"last_seen_ms\":" + String(bleDevices[i].lastSeenMs) + "}";
-  }
-
-  list += "]";
-  return list;
-}
-
-String buildBleActiveAddressCsv() {
-  String addresses;
-  bool first = true;
-
-  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
-    if (!bleDevices[i].active) {
-      continue;
-    }
-
-    if (!first) {
-      addresses += ", ";
-    }
-    first = false;
-    addresses += bleDevices[i].address;
-  }
-
-  return addresses;
-}
-
-String buildBleActiveSummary() {
-  String summary;
-  size_t shown = 0;
-
-  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
-    if (!bleDevices[i].active) {
-      continue;
-    }
-
-    String candidate = summary;
-    if (shown > 0) {
-      candidate += ", ";
-    }
-    candidate += bleDevices[i].address;
-
-    if (candidate.length() > 180) {
-      break;
-    }
-
-    summary = candidate;
-    shown++;
-  }
-
-  if (bleActiveCount == 0) {
-    return "none";
-  }
-
-  if (shown < bleActiveCount) {
-    summary += " +" + String(bleActiveCount - shown) + " more";
-  }
-
-  return summary;
-}
-
-void publishBlePresence(bool initialPublish) {
-  bleActiveCount = 0;
-  for (size_t i = 0; i < BLE_MAX_TRACKED_DEVICES; i++) {
-    if (bleDevices[i].active) {
-      bleActiveCount++;
-    }
-  }
-
-  String activeList = buildBleActiveDeviceListJson();
-  String activeCsv = buildBleActiveAddressCsv();
-  String activeSummary = buildBleActiveSummary();
-  String payload = String("{\"active_count\":") + String(bleActiveCount) +
-                   ",\"active_devices\":" + activeList +
-                   ",\"active_device_addresses\":\"" + activeCsv + "\"" +
-                   ",\"active_device_summary\":\"" + activeSummary + "\"" +
-                   ",\"new_devices\":" + String(bleNewCount) +
-                   ",\"expired_devices\":" + String(bleExpiredCount) +
-                   ",\"scan_duration_sec\":" + String(BLE_SCAN_DURATION_MS / 1000) +
-                   ",\"timestamp\":" + String(currentTimestampSeconds()) + "}";
-
-  String topic = topicBase + "/ble";
-  mqttPublish(topic.c_str(), payload.c_str(), true);
-
-  String listTopic = topicBase + "/ble/list";
-  String listPayload = String("{\"active_count\":") + String(bleActiveCount) +
-                       ",\"devices\":" + activeList +
-                       ",\"timestamp\":" + String(currentTimestampSeconds()) + "}";
-  mqttPublish(listTopic.c_str(), listPayload.c_str(), true);
-
-  if (initialPublish) {
-    Serial.printf("[BLE] Initial presence publish — %u devices active\n", (unsigned)bleActiveCount);
-  } else {
-    Serial.printf("[BLE] Presence updated — %u active, %u new, %u expired\n",
-                  (unsigned)bleActiveCount, (unsigned)bleNewCount, (unsigned)bleExpiredCount);
   }
 }
 
 void runBLEScan() {
   if (!pBLEScan) return;
 
-  Serial.println(F("[BLE] Starting scan..."));
+  bool anyConfigured = false;
+  for (size_t i = 0; i < BLE_MAX_WATCH_BEACONS; i++) {
+    if (isBeaconConfigured(i)) {
+      anyConfigured = true;
+      break;
+    }
+  }
+
+  if (!anyConfigured) {
+    return;
+  }
+
+  Serial.println(F("[BLE] Starting beacon watchlist scan..."));
 
   SentinelBLECallbacks callbacks;
-  resetBleScanMarks();
   pBLEScan->setAdvertisedDeviceCallbacks(&callbacks, false);
-  BLEScanResults results = pBLEScan->start(BLE_SCAN_DURATION_MS / 1000, false);  // 10-second scan
+  BLEScanResults results = pBLEScan->start(BLE_SCAN_DURATION_MS / 1000, false);
+  (void)results;
   pBLEScan->clearResults();
 
-  expireBleDevices(millis());
-
-  publishBlePresence(false);
+  expireBeaconPresence(millis());
+  publishBeaconState(false);
 }
 
 // ============================================================================
