@@ -224,6 +224,10 @@ void setupLED();
 void reconnectWiFi();
 void reconnectMQTT();
 void publishAutoDiscovery();
+void publishPirConfigDiscovery();
+void publishPirConfigState();
+void mqttMessageCallback(char* topic, byte* payload, unsigned int length);
+bool handlePirConfigCommand(const String& topic, const String& payload);
 
 void readAndPublishEnvironment();
 void publishDoorState(bool state);
@@ -277,6 +281,8 @@ void setup() {
   reconnectMQTT();
   if (mqttClient.connected()) {
     publishAutoDiscovery();
+    publishPirConfigDiscovery();
+    publishPirConfigState();
     publishBlePresence(true);
     // Publish initial door state at boot
     currentDoorState = digitalRead(PIN_DOOR);
@@ -881,6 +887,7 @@ void setupMQTT() {
   mqttClient.setServer(runtimeConfig.mqttServer.c_str(), runtimeConfig.mqttPort);
   mqttClient.setBufferSize(4096);
   mqttClient.setKeepAlive(60);
+  mqttClient.setCallback(mqttMessageCallback);
 }
 
 void reconnectMQTT() {
@@ -905,11 +912,73 @@ void reconnectMQTT() {
     mqttReconnects++;
     Serial.println(F("connected"));
     mqttPublish(willTopic.c_str(), "online", true);
+    String pirWarmupSetTopic = topicBase + "/config/pir_warmup_ms/set";
+    String pirDetectSetTopic = topicBase + "/config/pir_detect_stable_ms/set";
+    String pirClearSetTopic = topicBase + "/config/pir_clear_stable_ms/set";
+    String pirHoldSetTopic = topicBase + "/config/pir_hold_ms/set";
+    mqttClient.subscribe(pirWarmupSetTopic.c_str());
+    mqttClient.subscribe(pirDetectSetTopic.c_str());
+    mqttClient.subscribe(pirClearSetTopic.c_str());
+    mqttClient.subscribe(pirHoldSetTopic.c_str());
     blinkLED(2, 150);
   } else {
     Serial.printf("failed (rc=%d) — will retry in 5s\n", mqttClient.state());
     delay(5000);
   }
+}
+
+void mqttMessageCallback(char* topic, byte* payload, unsigned int length) {
+  String topicStr = String(topic);
+  String payloadStr;
+  payloadStr.reserve(length);
+
+  for (unsigned int i = 0; i < length; i++) {
+    payloadStr += (char)payload[i];
+  }
+  payloadStr.trim();
+
+  if (handlePirConfigCommand(topicStr, payloadStr)) {
+    return;
+  }
+
+  Serial.printf("[MQTT] Unhandled command topic: %s\n", topicStr.c_str());
+}
+
+bool handlePirConfigCommand(const String& topic, const String& payload) {
+  String key;
+
+  if (topic.endsWith("/config/pir_warmup_ms/set")) {
+    key = "pir_warmup_ms";
+  } else if (topic.endsWith("/config/pir_detect_stable_ms/set")) {
+    key = "pir_detect_stable_ms";
+  } else if (topic.endsWith("/config/pir_clear_stable_ms/set")) {
+    key = "pir_clear_stable_ms";
+  } else if (topic.endsWith("/config/pir_hold_ms/set")) {
+    key = "pir_hold_ms";
+  } else {
+    return false;
+  }
+
+  RuntimeConfig previousConfig = runtimeConfig;
+  if (!setRuntimeConfigValue(key, payload) || !validateRuntimeConfig(runtimeConfig)) {
+    runtimeConfig = previousConfig;
+    Serial.printf("[MQTT] Rejected PIR config update: %s=%s\n", key.c_str(), payload.c_str());
+    publishPirConfigState();
+    return true;
+  }
+
+  setupPIR();
+  if (!saveRuntimeConfigToNvs()) {
+    runtimeConfig = previousConfig;
+    setupPIR();
+    Serial.printf("[MQTT] Failed to persist PIR config update: %s=%s\n", key.c_str(), payload.c_str());
+    publishPirConfigState();
+    return true;
+  }
+
+  Serial.printf("[MQTT] Applied PIR config update: %s=%s\n", key.c_str(), payload.c_str());
+  publishPirConfigState();
+  return true;
 }
 
 void mqttPublish(const char* topic, const char* payload, bool retained) {
@@ -1035,6 +1104,81 @@ void publishAutoDiscovery() {
   }
 
   Serial.printf("[DISCOVERY] Published %d entities\n", entityCount);
+}
+
+void publishPirConfigDiscovery() {
+  struct PirNumberDiscovery {
+    const char* objectSuffix;
+    const char* name;
+    const char* key;
+    int minValue;
+    int maxValue;
+    int step;
+    const char* unit;
+    const char* icon;
+  };
+
+  PirNumberDiscovery numbers[] = {
+    {"pir_warmup_ms", "PIR Warmup", "pir_warmup_ms", 0, 300000, 1000, "ms", "mdi:timer-sand"},
+    {"pir_detect_stable_ms", "PIR Detect Stable", "pir_detect_stable_ms", 10, 10000, 10, "ms", "mdi:motion-sensor"},
+    {"pir_clear_stable_ms", "PIR Clear Stable", "pir_clear_stable_ms", 50, 60000, 50, "ms", "mdi:motion-sensor-off"},
+    {"pir_hold_ms", "PIR Hold", "pir_hold_ms", 250, 60000, 250, "ms", "mdi:timer-outline"},
+  };
+
+  int numberCount = sizeof(numbers) / sizeof(numbers[0]);
+  for (int i = 0; i < numberCount; i++) {
+    PirNumberDiscovery& number = numbers[i];
+    String configTopic = String("homeassistant/number/") + deviceID + "/" + number.objectSuffix + "/config";
+    String stateTopic = topicBase + "/config/" + number.key + "/state";
+    String commandTopic = topicBase + "/config/" + number.key + "/set";
+
+    StaticJsonDocument<768> doc;
+    doc["name"] = String("Sentinel ") + number.name;
+    doc["unique_id"] = deviceID + "_" + number.objectSuffix;
+    doc["state_topic"] = stateTopic;
+    doc["command_topic"] = commandTopic;
+    doc["min"] = number.minValue;
+    doc["max"] = number.maxValue;
+    doc["step"] = number.step;
+    doc["mode"] = "box";
+    doc["availability_topic"] = topicBase + "/status";
+    doc["payload_available"] = "online";
+    doc["payload_not_available"] = "offline";
+    if (number.unit) {
+      doc["unit_of_measurement"] = number.unit;
+    }
+    if (number.icon) {
+      doc["icon"] = number.icon;
+    }
+
+    JsonObject dev = doc.createNestedObject("device");
+    JsonArray ids = dev.createNestedArray("identifiers");
+    ids.add(deviceID);
+    dev["name"] = deviceName;
+    dev["manufacturer"] = "Sentinel DIY";
+    dev["model"] = "Sentinel Multi-Sensor v2";
+    dev["sw_version"] = "2.0.0";
+    dev["connections"].to<JsonArray>().add(serialized("[\"mac\",\"" + deviceMAC + "\"]"));
+
+    char payload[768];
+    serializeJson(doc, payload, sizeof(payload));
+    mqttClient.publish(configTopic.c_str(), payload, true);
+    delay(50);
+  }
+
+  Serial.printf("[DISCOVERY] Published %d PIR config entities\n", numberCount);
+}
+
+void publishPirConfigState() {
+  String warmupTopic = topicBase + "/config/pir_warmup_ms/state";
+  String detectTopic = topicBase + "/config/pir_detect_stable_ms/state";
+  String clearTopic = topicBase + "/config/pir_clear_stable_ms/state";
+  String holdTopic = topicBase + "/config/pir_hold_ms/state";
+
+  mqttPublish(warmupTopic.c_str(), String(runtimeConfig.pirWarmupMs).c_str(), true);
+  mqttPublish(detectTopic.c_str(), String(runtimeConfig.pirDetectStableMs).c_str(), true);
+  mqttPublish(clearTopic.c_str(), String(runtimeConfig.pirClearStableMs).c_str(), true);
+  mqttPublish(holdTopic.c_str(), String(runtimeConfig.pirHoldMs).c_str(), true);
 }
 
 // ============================================================================
