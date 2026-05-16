@@ -272,6 +272,7 @@ void setup() {
   reconnectMQTT();
   if (mqttClient.connected()) {
     publishAutoDiscovery();
+    publishBlePresence(true);
     // Publish initial door state at boot
     currentDoorState = digitalRead(PIN_DOOR);
     lastDoorState = currentDoorState;
