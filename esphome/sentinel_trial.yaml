@@ -1,0 +1,402 @@
+# Trial ESPHome port of the Sentinel node.
+#
+# Keeps what ESPHome is good at:
+# - Wi-Fi + native API/Home Assistant integration
+# - BME280 environment telemetry
+# - PIR motion, reed switch door, and MAX9814 sound detection
+# - Runtime tuning through Home Assistant number entities
+#
+# Leaves out on purpose:
+# - Custom MQTT topic/discovery model
+# - Custom serial cfg command interface
+
+substitutions:
+  device_name: sentinel-trial
+  friendly_name: Sentinel Trial
+  wifi_ssid: YOUR_WIFI_SSID
+  wifi_password: YOUR_WIFI_PASSWORD
+  fallback_ap_password: change-me-1234
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: Trial ESPHome conversion of the Sentinel ESP32 node
+  project:
+    name: sentinel.trial
+    version: "0.1"
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          id(pir_warmup_until_ms) = millis() + (uint32_t) id(pir_warmup_ms).state;
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+preferences:
+  flash_write_interval: 1min
+
+logger:
+
+api:
+
+ota:
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+  # Uncomment and edit if you want a fixed LAN address.
+  # manual_ip:
+  #   static_ip: 192.168.1.50
+  #   gateway: 192.168.1.1
+  #   subnet: 255.255.255.0
+  #   dns1: 192.168.1.1
+  #   dns2: 1.1.1.1
+  ap:
+    ssid: ${friendly_name} Fallback
+    password: ${fallback_ap_password}
+
+captive_portal:
+
+status_led:
+  pin:
+    number: 2
+
+i2c:
+  sda: 21
+  scl: 22
+  scan: true
+
+globals:
+  - id: pir_high_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: pir_low_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: pir_hold_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: pir_warmup_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: pir_motion_state
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: sound_window_start_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: sound_min_sample
+    type: int
+    restore_value: no
+    initial_value: '4095'
+  - id: sound_max_sample
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: sound_peak_to_peak_adc_raw
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: sound_hold_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: sound_intrusion_state
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+number:
+  - platform: template
+    name: ${friendly_name} PIR Warmup
+    id: pir_warmup_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 30000
+    min_value: 0
+    max_value: 120000
+    step: 1000
+    mode: box
+
+  - platform: template
+    name: ${friendly_name} PIR Detect Stable
+    id: pir_detect_stable_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 150
+    min_value: 0
+    max_value: 5000
+    step: 10
+    mode: box
+
+  - platform: template
+    name: ${friendly_name} PIR Clear Stable
+    id: pir_clear_stable_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 1500
+    min_value: 0
+    max_value: 10000
+    step: 50
+    mode: box
+
+  - platform: template
+    name: ${friendly_name} PIR Hold
+    id: pir_hold_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 5000
+    min_value: 0
+    max_value: 20000
+    step: 100
+    mode: box
+
+  - platform: template
+    name: ${friendly_name} Sound Sample Window
+    id: sound_sample_window_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 100
+    min_value: 20
+    max_value: 1000
+    step: 10
+    mode: box
+
+  - platform: template
+    name: ${friendly_name} Sound Hold
+    id: sound_hold_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 3000
+    min_value: 0
+    max_value: 15000
+    step: 100
+    mode: box
+
+  - platform: template
+    name: ${friendly_name} Sound Threshold ADC
+    id: sound_threshold_adc
+    unit_of_measurement: adc
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 1200
+    min_value: 0
+    max_value: 4095
+    step: 10
+    mode: box
+
+sensor:
+  - platform: bme280_i2c
+    address: 0x76
+    update_interval: 30s
+    temperature:
+      name: ${friendly_name} Temperature
+      id: bme_temperature_f
+      unit_of_measurement: "°F"
+      device_class: temperature
+      state_class: measurement
+      filters:
+        - lambda: return x * 9.0f / 5.0f + 32.0f;
+    pressure:
+      name: ${friendly_name} Pressure
+      unit_of_measurement: hPa
+      device_class: atmospheric_pressure
+      state_class: measurement
+    humidity:
+      name: ${friendly_name} Humidity
+      device_class: humidity
+      state_class: measurement
+
+  - platform: wifi_signal
+    name: ${friendly_name} WiFi RSSI
+    update_interval: 60s
+
+  - platform: uptime
+    name: ${friendly_name} Uptime
+    update_interval: 60s
+
+  - platform: template
+    name: ${friendly_name} Sound Peak ADC
+    id: sound_peak_adc
+    unit_of_measurement: adc
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: never
+
+  - platform: template
+    name: ${friendly_name} Sound Min ADC
+    id: sound_min_adc
+    unit_of_measurement: adc
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: never
+
+  - platform: template
+    name: ${friendly_name} Sound Max ADC
+    id: sound_max_adc
+    unit_of_measurement: adc
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: never
+
+binary_sensor:
+  - platform: gpio
+    id: pir_raw
+    internal: true
+    pin:
+      number: 27
+      mode: INPUT
+    on_state:
+      then:
+        - lambda: |-
+            const uint32_t now = millis();
+            if (x) {
+              if (id(pir_high_since_ms) == 0) {
+                id(pir_high_since_ms) = now;
+              }
+              id(pir_low_since_ms) = 0;
+            } else {
+              if (id(pir_low_since_ms) == 0) {
+                id(pir_low_since_ms) = now;
+              }
+              id(pir_high_since_ms) = 0;
+            }
+
+  - platform: template
+    name: ${friendly_name} Motion
+    id: pir_motion
+    device_class: motion
+
+  - platform: gpio
+    name: ${friendly_name} Door
+    device_class: door
+    pin:
+      number: 32
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+
+  - platform: template
+    name: ${friendly_name} Sound Intrusion
+    id: sound_intrusion
+    device_class: sound
+
+  - platform: status
+    name: ${friendly_name} Status
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: ${friendly_name} IP Address
+    ssid:
+      name: ${friendly_name} WiFi SSID
+
+button:
+  - platform: restart
+    name: ${friendly_name} Restart
+
+interval:
+  - interval: 50ms
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          const bool raw = id(pir_raw).state;
+
+          if (now < id(pir_warmup_until_ms)) {
+            if (id(pir_motion_state)) {
+              id(pir_motion_state) = false;
+              id(pir_motion).publish_state(false);
+            }
+            return;
+          }
+
+          if (raw) {
+            if (!id(pir_motion_state)) {
+              const uint32_t detect_ms = (uint32_t) id(pir_detect_stable_ms).state;
+              if (id(pir_high_since_ms) != 0 && (now - id(pir_high_since_ms)) >= detect_ms) {
+                id(pir_motion_state) = true;
+                id(pir_hold_until_ms) = now + (uint32_t) id(pir_hold_ms).state;
+                id(pir_motion).publish_state(true);
+              }
+            } else {
+              id(pir_hold_until_ms) = now + (uint32_t) id(pir_hold_ms).state;
+            }
+          } else if (id(pir_motion_state)) {
+            const uint32_t clear_ms = (uint32_t) id(pir_clear_stable_ms).state;
+            const bool low_stable = id(pir_low_since_ms) != 0 && (now - id(pir_low_since_ms)) >= clear_ms;
+            const bool hold_expired = now >= id(pir_hold_until_ms);
+            if (low_stable && hold_expired) {
+              id(pir_motion_state) = false;
+              id(pir_motion).publish_state(false);
+            }
+          }
+
+  - interval: 10ms
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          const int sample = analogRead(34);
+
+          if (id(sound_window_start_ms) == 0) {
+            id(sound_window_start_ms) = now;
+            id(sound_min_sample) = sample;
+            id(sound_max_sample) = sample;
+          }
+
+          if (sample < id(sound_min_sample)) {
+            id(sound_min_sample) = sample;
+          }
+          if (sample > id(sound_max_sample)) {
+            id(sound_max_sample) = sample;
+          }
+
+          const uint32_t window_ms = (uint32_t) id(sound_sample_window_ms).state;
+          if ((now - id(sound_window_start_ms)) < window_ms) {
+            return;
+          }
+
+          const int peak = id(sound_max_sample) - id(sound_min_sample);
+          id(sound_peak_to_peak_adc_raw) = peak;
+          id(sound_peak_adc).publish_state(peak);
+          id(sound_min_adc).publish_state(id(sound_min_sample));
+          id(sound_max_adc).publish_state(id(sound_max_sample));
+
+          if (peak >= (int) id(sound_threshold_adc).state) {
+            id(sound_hold_until_ms) = now + (uint32_t) id(sound_hold_ms).state;
+            if (!id(sound_intrusion_state)) {
+              id(sound_intrusion_state) = true;
+              id(sound_intrusion).publish_state(true);
+            }
+          } else if (id(sound_intrusion_state) && now >= id(sound_hold_until_ms)) {
+            id(sound_intrusion_state) = false;
+            id(sound_intrusion).publish_state(false);
+          }
+
+          id(sound_window_start_ms) = now;
+          id(sound_min_sample) = sample;
+          id(sound_max_sample) = sample;
