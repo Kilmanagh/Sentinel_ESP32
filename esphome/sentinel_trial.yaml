@@ -39,6 +39,7 @@ preferences:
   flash_write_interval: 1min
 
 logger:
+  level: INFO
 
 api:
 
@@ -243,6 +244,8 @@ sensor:
     unit_of_measurement: adc
     accuracy_decimals: 0
     state_class: measurement
+    filters:
+      - throttle: 1s
     update_interval: never
 
   - platform: template
@@ -251,6 +254,8 @@ sensor:
     unit_of_measurement: adc
     accuracy_decimals: 0
     state_class: measurement
+    filters:
+      - throttle: 1s
     update_interval: never
 
   - platform: template
@@ -259,6 +264,8 @@ sensor:
     unit_of_measurement: adc
     accuracy_decimals: 0
     state_class: measurement
+    filters:
+      - throttle: 1s
     update_interval: never
 
 binary_sensor:
