@@ -305,6 +305,13 @@ If you are using the ESPHome trial YAML, you can also expose:
 - `Sound dB Ceiling`
 - `Sound Level %`
 - `Sound Approx dB`
+- `Enable Smoke Alarm Sensing`
+- `Smoke Alarm Tone Threshold`
+- `Smoke Alarm Min Peak ADC`
+- `Smoke Alarm Hold`
+- `Smoke Alarm Confirm Beeps`
+- `Smoke Alarm Tone Score`
+- `Smoke Alarm Detected`
 
 ### Serial config keys
 
@@ -333,7 +340,19 @@ For the ESPHome trial calibration entities:
 - `Sound Level %`: Relative loudness scaled between the floor and ceiling ADC values.
 - `Sound Approx dB`: A linear estimate derived from `Sound Level %` and the dB floor/ceiling values.
 
+For the ESPHome smoke alarm detector:
+
+- `Enable Smoke Alarm Sensing`: Turns the tone-and-cadence detector on or off.
+- `Smoke Alarm Tone Threshold`: Minimum tone score required before a beep is considered a smoke alarm tone.
+- `Smoke Alarm Min Peak ADC`: Minimum overall sound strength required before tone scoring is allowed to count.
+- `Smoke Alarm Hold`: How long `Smoke Alarm Detected` stays on after a valid alarm pattern is seen.
+- `Smoke Alarm Confirm Beeps`: How many valid beeps must be seen close together before the alarm is declared.
+- `Smoke Alarm Tone Score`: Best-effort score showing how much the captured audio resembles the target alarm frequencies.
+- `Smoke Alarm Detected`: Binary result of the smoke alarm detector.
+
 `Sound Level %` and `Sound Approx dB` are calibration outputs. They are not true SPL meter readings.
+
+`Smoke Alarm Detected` is a convenience automation signal. It is not a certified life-safety detector.
 
 ### How to tune sound
 
@@ -393,6 +412,62 @@ Important limits:
 - The MAX9814 uses AGC, so absolute loudness is not stable like a calibrated sound meter.
 - The ESP32 ADC is not a precision audio front end.
 - `Sound Approx dB` is best treated as a room-specific estimate for automation, not an instrument-grade reading.
+
+### Smoke Alarm Sensing
+
+The ESPHome build can also do a best-effort smoke alarm check using the same microphone.
+
+It looks for:
+
+- strong enough sound to clear a minimum ADC peak threshold
+- energy around common alarm frequencies near `3000-3400 Hz`
+- repeated beeps close enough together to match an alarm pattern instead of a single random chirp
+
+This works better than plain loudness thresholding, but it is still limited by:
+
+- MAX9814 AGC behavior
+- ESP32 ADC quality
+- room acoustics and distance from the alarm
+- differences between smoke alarm brands and tones
+
+Use it for automation and notifications, not as a substitute for a listed smoke alarm.
+
+### Recommended smoke alarm adjustment order
+
+1. Turn on `Enable Smoke Alarm Sensing`.
+2. Test with a real smoke alarm test tone if possible.
+3. Watch `Smoke Alarm Tone Score` during the beep.
+4. Adjust `Smoke Alarm Tone Threshold` so normal room sounds stay below it and the alarm tone rises above it.
+5. Adjust `Smoke Alarm Min Peak ADC` if distant speech or short clatter still triggers the tone detector.
+6. Adjust `Smoke Alarm Confirm Beeps` if you want detection faster or slower.
+7. Adjust `Smoke Alarm Hold` last for Home Assistant behavior.
+
+### Smoke alarm starting points
+
+- `Smoke Alarm Tone Threshold = 18`
+- `Smoke Alarm Min Peak ADC = 250`
+- `Smoke Alarm Confirm Beeps = 3`
+- `Smoke Alarm Hold = 15000`
+
+If normal sounds falsely trigger smoke alarm detection:
+
+- Increase `Smoke Alarm Tone Threshold`
+- Increase `Smoke Alarm Min Peak ADC`
+- Increase `Smoke Alarm Confirm Beeps`
+
+If a real alarm test is missed:
+
+- Decrease `Smoke Alarm Tone Threshold`
+- Decrease `Smoke Alarm Min Peak ADC`
+- Decrease `Smoke Alarm Confirm Beeps`
+
+If the smoke alarm event clears too quickly in Home Assistant:
+
+- Increase `Smoke Alarm Hold`
+
+If the smoke alarm event stays active too long after the alarm stops:
+
+- Decrease `Smoke Alarm Hold`
 
 ### Example serial commands
 

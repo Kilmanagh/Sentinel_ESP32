@@ -84,6 +84,10 @@ globals:
     type: bool
     restore_value: yes
     initial_value: 'true'
+  - id: smoke_alarm_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
   - id: pir_high_since_ms
     type: uint32_t
     restore_value: no
@@ -128,6 +132,26 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
+  - id: smoke_alarm_state
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: smoke_alarm_tone_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: smoke_alarm_last_beep_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: smoke_alarm_hold_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: smoke_alarm_beep_count
+    type: int
+    restore_value: no
+    initial_value: '0'
 
 script:
   - id: reset_runtime_states
@@ -143,21 +167,32 @@ script:
           id(sound_peak_to_peak_adc_raw) = 0;
           id(sound_hold_until_ms) = 0;
           id(sound_intrusion_state) = false;
-      - binary_sensor.template.publish:
-          id: pir_motion
-          state: false
-      - binary_sensor.template.publish:
-          id: sound_intrusion
-          state: false
-      - sensor.template.publish:
-          id: sound_peak_adc
-          state: 0
-      - sensor.template.publish:
-          id: sound_min_adc
-          state: 0
-      - sensor.template.publish:
-          id: sound_max_adc
-          state: 0
+            id(smoke_alarm_state) = false;
+            id(smoke_alarm_tone_active) = false;
+            id(smoke_alarm_last_beep_ms) = 0;
+            id(smoke_alarm_hold_until_ms) = 0;
+            id(smoke_alarm_beep_count) = 0;
+          - binary_sensor.template.publish:
+            id: pir_motion
+            state: false
+          - binary_sensor.template.publish:
+            id: sound_intrusion
+            state: false
+          - binary_sensor.template.publish:
+            id: smoke_alarm_detected
+            state: false
+          - sensor.template.publish:
+            id: sound_peak_adc
+            state: 0
+          - sensor.template.publish:
+            id: sound_min_adc
+            state: 0
+          - sensor.template.publish:
+            id: sound_max_adc
+            state: 0
+          - sensor.template.publish:
+            id: smoke_alarm_tone_score
+            state: 0
 
 number:
   - platform: template
@@ -303,6 +338,57 @@ number:
     step: 1
     mode: box
 
+  - platform: template
+    name: Smoke Alarm Tone Threshold
+    id: smoke_alarm_tone_threshold_pct
+    unit_of_measurement: "%"
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 18
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: box
+
+  - platform: template
+    name: Smoke Alarm Min Peak ADC
+    id: smoke_alarm_min_peak_adc
+    unit_of_measurement: adc
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 250
+    min_value: 0
+    max_value: 4095
+    step: 10
+    mode: box
+
+  - platform: template
+    name: Smoke Alarm Hold
+    id: smoke_alarm_hold_ms_config
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 15000
+    min_value: 1000
+    max_value: 60000
+    step: 500
+    mode: box
+
+  - platform: template
+    name: Smoke Alarm Confirm Beeps
+    id: smoke_alarm_confirm_beeps
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 3
+    min_value: 1
+    max_value: 6
+    step: 1
+    mode: box
+
 switch:
   - platform: template
     name: Enable PIR
@@ -344,6 +430,40 @@ switch:
           id(sound_peak_adc).publish_state(0);
           id(sound_min_adc).publish_state(0);
           id(sound_max_adc).publish_state(0);
+          id(smoke_alarm_state) = false;
+          id(smoke_alarm_tone_active) = false;
+          id(smoke_alarm_last_beep_ms) = 0;
+          id(smoke_alarm_hold_until_ms) = 0;
+          id(smoke_alarm_beep_count) = 0;
+          id(smoke_alarm_detected).publish_state(false);
+          id(smoke_alarm_tone_score).publish_state(0);
+
+  - platform: template
+    name: Enable Smoke Alarm Sensing
+    id: smoke_alarm_enable_switch
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          id(smoke_alarm_enabled) = true;
+          id(smoke_alarm_state) = false;
+          id(smoke_alarm_tone_active) = false;
+          id(smoke_alarm_last_beep_ms) = 0;
+          id(smoke_alarm_hold_until_ms) = 0;
+          id(smoke_alarm_beep_count) = 0;
+          id(smoke_alarm_detected).publish_state(false);
+          id(smoke_alarm_tone_score).publish_state(0);
+    turn_off_action:
+      - lambda: |-
+          id(smoke_alarm_enabled) = false;
+          id(smoke_alarm_state) = false;
+          id(smoke_alarm_tone_active) = false;
+          id(smoke_alarm_last_beep_ms) = 0;
+          id(smoke_alarm_hold_until_ms) = 0;
+          id(smoke_alarm_beep_count) = 0;
+          id(smoke_alarm_detected).publish_state(false);
+          id(smoke_alarm_tone_score).publish_state(0);
 
 sensor:
   - platform: bme280_i2c
@@ -513,6 +633,15 @@ sensor:
       }
       return db_floor + ((db_ceiling - db_floor) * (percent / 100.0f));
 
+  - platform: template
+    name: Smoke Alarm Tone Score
+    id: smoke_alarm_tone_score
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    icon: mdi:sine-wave
+    state_class: measurement
+    update_interval: never
+
 binary_sensor:
   - platform: gpio
     id: pir_raw
@@ -556,6 +685,11 @@ binary_sensor:
   - platform: template
     name: Sound Intrusion
     id: sound_intrusion
+    device_class: sound
+
+  - platform: template
+    name: Smoke Alarm Detected
+    id: smoke_alarm_detected
     device_class: sound
 
   - platform: status
@@ -699,6 +833,106 @@ interval:
           } else if (id(sound_intrusion_state) && now >= id(sound_hold_until_ms)) {
             id(sound_intrusion_state) = false;
             id(sound_intrusion).publish_state(false);
+          }
+
+          if (id(smoke_alarm_enabled)) {
+            constexpr int smoke_sample_count = 64;
+            constexpr int smoke_sample_interval_us = 125;
+            constexpr float smoke_sample_rate_hz = 8000.0f;
+            constexpr uint32_t smoke_min_beep_gap_ms = 250;
+            constexpr uint32_t smoke_max_beep_gap_ms = 2000;
+            const float smoke_target_freqs[] = {3000.0f, 3200.0f, 3400.0f};
+
+            int smoke_samples[smoke_sample_count];
+            int32_t smoke_sum = 0;
+            for (int index = 0; index < smoke_sample_count; index++) {
+              const int raw_sample = analogRead(34);
+              smoke_samples[index] = raw_sample;
+              smoke_sum += raw_sample;
+              delayMicroseconds(smoke_sample_interval_us);
+            }
+
+            const float smoke_mean = (float) smoke_sum / smoke_sample_count;
+            float smoke_energy = 0.0f;
+            for (int index = 0; index < smoke_sample_count; index++) {
+              const float centered = smoke_samples[index] - smoke_mean;
+              smoke_energy += centered * centered;
+            }
+
+            float smoke_best_power = 0.0f;
+            for (float target_freq : smoke_target_freqs) {
+              const float omega = 2.0f * 3.14159265f * target_freq / smoke_sample_rate_hz;
+              const float coeff = 2.0f * cosf(omega);
+              float q0 = 0.0f;
+              float q1 = 0.0f;
+              float q2 = 0.0f;
+
+              for (int index = 0; index < smoke_sample_count; index++) {
+                const float centered = smoke_samples[index] - smoke_mean;
+                q0 = coeff * q1 - q2 + centered;
+                q2 = q1;
+                q1 = q0;
+              }
+
+              const float power = q1 * q1 + q2 * q2 - coeff * q1 * q2;
+              if (power > smoke_best_power) {
+                smoke_best_power = power;
+              }
+            }
+
+            float smoke_tone_score = 0.0f;
+            if (smoke_energy > 1.0f) {
+              smoke_tone_score = (smoke_best_power / (smoke_energy * smoke_sample_count)) * 100.0f;
+              if (smoke_tone_score < 0.0f) smoke_tone_score = 0.0f;
+              if (smoke_tone_score > 100.0f) smoke_tone_score = 100.0f;
+            }
+            id(smoke_alarm_tone_score).publish_state(smoke_tone_score);
+
+            const bool tone_detected = peak >= (int) id(smoke_alarm_min_peak_adc).state &&
+                                       smoke_tone_score >= id(smoke_alarm_tone_threshold_pct).state;
+
+            if (tone_detected) {
+              if (!id(smoke_alarm_tone_active)) {
+                const uint32_t since_last_beep = id(smoke_alarm_last_beep_ms) == 0 ? 0 : now - id(smoke_alarm_last_beep_ms);
+                if (id(smoke_alarm_last_beep_ms) == 0 || since_last_beep > smoke_max_beep_gap_ms) {
+                  id(smoke_alarm_beep_count) = 1;
+                } else if (since_last_beep >= smoke_min_beep_gap_ms) {
+                  id(smoke_alarm_beep_count) += 1;
+                }
+
+                id(smoke_alarm_last_beep_ms) = now;
+                id(smoke_alarm_tone_active) = true;
+
+                if (id(smoke_alarm_beep_count) >= (int) id(smoke_alarm_confirm_beeps).state) {
+                  id(smoke_alarm_state) = true;
+                  id(smoke_alarm_hold_until_ms) = now + (uint32_t) id(smoke_alarm_hold_ms_config).state;
+                  id(smoke_alarm_detected).publish_state(true);
+                }
+              }
+
+              if (id(smoke_alarm_state)) {
+                id(smoke_alarm_hold_until_ms) = now + (uint32_t) id(smoke_alarm_hold_ms_config).state;
+              }
+            } else {
+              id(smoke_alarm_tone_active) = false;
+
+              if (id(smoke_alarm_last_beep_ms) != 0 && (now - id(smoke_alarm_last_beep_ms)) > smoke_max_beep_gap_ms) {
+                id(smoke_alarm_beep_count) = 0;
+              }
+
+              if (id(smoke_alarm_state) && now >= id(smoke_alarm_hold_until_ms)) {
+                id(smoke_alarm_state) = false;
+                id(smoke_alarm_detected).publish_state(false);
+              }
+            }
+          } else if (id(smoke_alarm_state)) {
+            id(smoke_alarm_state) = false;
+            id(smoke_alarm_tone_active) = false;
+            id(smoke_alarm_last_beep_ms) = 0;
+            id(smoke_alarm_hold_until_ms) = 0;
+            id(smoke_alarm_beep_count) = 0;
+            id(smoke_alarm_detected).publish_state(false);
+            id(smoke_alarm_tone_score).publish_state(0);
           }
 
           id(sound_window_start_ms) = now;
