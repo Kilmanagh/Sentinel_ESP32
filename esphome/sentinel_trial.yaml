@@ -1,4 +1,4 @@
-# Trial ESPHome port of the Sentinel node.
+# ESPHome port of the Sentinel node.
 #
 # Keeps what ESPHome is good at:
 # - Wi-Fi + native API/Home Assistant integration
@@ -11,16 +11,16 @@
 # - Custom serial cfg command interface
 
 substitutions:
-  device_name: sentinel-trial
-  friendly_name: Sentinel Trial
+  device_name: sentinel
+  friendly_name: Sentinel
   fallback_ap_password: change-me-1234
 
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  comment: Trial ESPHome conversion of the Sentinel ESP32 node
+  comment: Sentinel ESP32 node
   project:
-    name: sentinel.trial
+    name: sentinel.node
     version: "0.1"
   on_boot:
     priority: -100
