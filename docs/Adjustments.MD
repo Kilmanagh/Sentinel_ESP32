@@ -297,6 +297,15 @@ What the firmware can tune is:
 - `Sentinel Sound Hold`
 - `Sentinel Sound Threshold`
 
+If you are using the ESPHome trial YAML, you can also expose:
+
+- `Sound Level Floor ADC`
+- `Sound Level Ceiling ADC`
+- `Sound dB Floor`
+- `Sound dB Ceiling`
+- `Sound Level %`
+- `Sound Approx dB`
+
 ### Serial config keys
 
 - `sound_sample_window_ms`
@@ -314,6 +323,17 @@ What the firmware can tune is:
 - `sound_sample_window_ms`: How long the ESP32 samples the microphone before deciding whether a sound event happened.
 - `sound_hold_ms`: After a sound intrusion is detected, keep the binary sensor active for this long before clearing.
 - `sound_threshold_adc`: Required peak-to-peak ADC swing needed to declare sound intrusion.
+
+For the ESPHome trial calibration entities:
+
+- `Sound Level Floor ADC`: The peak-to-peak value that should be treated as `0%` sound.
+- `Sound Level Ceiling ADC`: The peak-to-peak value that should be treated as `100%` sound.
+- `Sound dB Floor`: The approximate dB value you want mapped to `0%`.
+- `Sound dB Ceiling`: The approximate dB value you want mapped to `100%`.
+- `Sound Level %`: Relative loudness scaled between the floor and ceiling ADC values.
+- `Sound Approx dB`: A linear estimate derived from `Sound Level %` and the dB floor/ceiling values.
+
+`Sound Level %` and `Sound Approx dB` are calibration outputs. They are not true SPL meter readings.
 
 ### How to tune sound
 
@@ -340,6 +360,39 @@ If the sound event stays active too long:
 1. Adjust `sound_threshold_adc` first.
 2. Adjust `sound_sample_window_ms` second.
 3. Adjust `sound_hold_ms` last for Home Assistant behavior.
+
+### Calibrating Sound Level % and Approx dB
+
+Use this only if you want a relative sound level display in the ESPHome trial.
+
+1. Let the room sit in its normal quiet state.
+2. Watch `Sound Peak ADC` for 30-60 seconds and note the typical quiet value.
+3. Set `Sound Level Floor ADC` just above that quiet baseline.
+4. Make a repeatable loud sound you care about, such as clapping, speech near the device, or a test tone.
+5. Watch `Sound Peak ADC` and note the typical loud value.
+6. Set `Sound Level Ceiling ADC` near that loud value.
+7. Pick a reasonable `Sound dB Floor` and `Sound dB Ceiling` pair if you want an approximate dB estimate.
+
+Example starting point:
+
+- Quiet room peak-to-peak: `60`
+- Loud reference peak-to-peak: `1800`
+- `Sound Level Floor ADC = 60`
+- `Sound Level Ceiling ADC = 1800`
+- `Sound dB Floor = 35`
+- `Sound dB Ceiling = 90`
+
+This gives you:
+
+- `0%` near your quiet room baseline
+- `100%` near your chosen loud reference
+- an approximate dB figure mapped linearly between those points
+
+Important limits:
+
+- The MAX9814 uses AGC, so absolute loudness is not stable like a calibrated sound meter.
+- The ESP32 ADC is not a precision audio front end.
+- `Sound Approx dB` is best treated as a room-specific estimate for automation, not an instrument-grade reading.
 
 ### Example serial commands
 

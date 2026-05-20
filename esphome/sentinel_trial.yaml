@@ -219,6 +219,58 @@ number:
     step: 10
     mode: box
 
+  - platform: template
+    name: Sound Level Floor ADC
+    id: sound_level_floor_adc
+    unit_of_measurement: adc
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 60
+    min_value: 0
+    max_value: 4095
+    step: 5
+    mode: box
+
+  - platform: template
+    name: Sound Level Ceiling ADC
+    id: sound_level_ceiling_adc
+    unit_of_measurement: adc
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 1800
+    min_value: 1
+    max_value: 4095
+    step: 5
+    mode: box
+
+  - platform: template
+    name: Sound dB Floor
+    id: sound_db_floor
+    unit_of_measurement: dB
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 35
+    min_value: 0
+    max_value: 120
+    step: 1
+    mode: box
+
+  - platform: template
+    name: Sound dB Ceiling
+    id: sound_db_ceiling
+    unit_of_measurement: dB
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 90
+    min_value: 1
+    max_value: 140
+    step: 1
+    mode: box
+
 switch:
   - platform: template
     name: Enable PIR
@@ -390,6 +442,44 @@ sensor:
     filters:
       - throttle: 1s
     update_interval: never
+
+  - platform: template
+    name: Sound Level %
+    id: sound_level_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    icon: mdi:volume-high
+    state_class: measurement
+    update_interval: 1s
+    lambda: |-
+      const float peak = id(sound_peak_adc).state;
+      const float floor_adc = id(sound_level_floor_adc).state;
+      const float ceiling_adc = id(sound_level_ceiling_adc).state;
+      if (isnan(peak) || isnan(floor_adc) || isnan(ceiling_adc) || ceiling_adc <= floor_adc) {
+        return NAN;
+      }
+
+      float percent = ((peak - floor_adc) / (ceiling_adc - floor_adc)) * 100.0f;
+      if (percent < 0.0f) percent = 0.0f;
+      if (percent > 100.0f) percent = 100.0f;
+      return percent;
+
+  - platform: template
+    name: Sound Approx dB
+    id: sound_approx_db
+    unit_of_measurement: dB
+    accuracy_decimals: 1
+    icon: mdi:waveform
+    state_class: measurement
+    update_interval: 1s
+    lambda: |-
+      const float percent = id(sound_level_percent).state;
+      const float db_floor = id(sound_db_floor).state;
+      const float db_ceiling = id(sound_db_ceiling).state;
+      if (isnan(percent) || isnan(db_floor) || isnan(db_ceiling) || db_ceiling <= db_floor) {
+        return NAN;
+      }
+      return db_floor + ((db_ceiling - db_floor) * (percent / 100.0f));
 
 binary_sensor:
   - platform: gpio
