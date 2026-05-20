@@ -129,6 +129,18 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
+  - id: sound_calibration_mode
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: sound_calibration_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: sound_calibration_peak
+    type: int
+    restore_value: no
+    initial_value: '0'
   - id: smoke_alarm_state
     type: bool
     restore_value: no
@@ -164,6 +176,9 @@ script:
           id(sound_peak_to_peak_adc_raw) = 0;
           id(sound_hold_until_ms) = 0;
           id(sound_intrusion_state) = false;
+          id(sound_calibration_mode) = 0;
+          id(sound_calibration_until_ms) = 0;
+          id(sound_calibration_peak) = 0;
           id(smoke_alarm_state) = false;
           id(smoke_alarm_tone_active) = false;
           id(smoke_alarm_last_beep_ms) = 0;
@@ -336,6 +351,19 @@ number:
     mode: box
 
   - platform: template
+    name: Sound Calibration Capture Duration
+    id: sound_calibration_capture_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 10000
+    min_value: 2000
+    max_value: 30000
+    step: 500
+    mode: box
+
+  - platform: template
     name: Smoke Alarm Tone Threshold
     id: smoke_alarm_tone_threshold_pct
     unit_of_measurement: "%"
@@ -420,6 +448,9 @@ switch:
       - lambda: |-
           id(sound_enabled) = false;
           id(sound_intrusion_state) = false;
+          id(sound_calibration_mode) = 0;
+          id(sound_calibration_until_ms) = 0;
+          id(sound_calibration_peak) = 0;
           id(sound_window_start_ms) = 0;
           id(sound_hold_until_ms) = 0;
           id(sound_peak_to_peak_adc_raw) = 0;
@@ -640,6 +671,17 @@ sensor:
     update_interval: never
 
   - platform: template
+    name: Sound Calibration Captured Peak
+    id: sound_calibration_captured_peak
+    unit_of_measurement: adc
+    accuracy_decimals: 0
+    icon: mdi:tune-vertical
+    state_class: measurement
+    update_interval: 1s
+    lambda: |-
+      return (float) id(sound_calibration_peak);
+
+  - platform: template
     name: Smoke Alarm Beep Count
     id: smoke_alarm_beep_count_sensor
     icon: mdi:counter
@@ -718,6 +760,19 @@ binary_sensor:
 
 text_sensor:
   - platform: template
+    name: Sound Calibration Status
+    icon: mdi:tune
+    update_interval: 1s
+    lambda: |-
+      if (id(sound_calibration_mode) == 1) {
+        return {"Capturing Quiet Baseline"};
+      }
+      if (id(sound_calibration_mode) == 2) {
+        return {"Capturing Loud Reference"};
+      }
+      return {"Idle"};
+
+  - platform: template
     name: Comfort Level
     icon: mdi:emoticon-outline
     update_interval: 30s
@@ -754,6 +809,26 @@ text_sensor:
       name: WiFi SSID
 
 button:
+  - platform: template
+    name: Capture Quiet Baseline
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            id(sound_calibration_mode) = 1;
+            id(sound_calibration_until_ms) = millis() + (uint32_t) id(sound_calibration_capture_ms).state;
+            id(sound_calibration_peak) = 0;
+
+  - platform: template
+    name: Capture Loud Reference
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            id(sound_calibration_mode) = 2;
+            id(sound_calibration_until_ms) = millis() + (uint32_t) id(sound_calibration_capture_ms).state;
+            id(sound_calibration_peak) = 0;
+
   - platform: template
     name: Reset Detection State
     entity_category: config
@@ -844,6 +919,41 @@ interval:
           id(sound_peak_adc).publish_state(peak);
           id(sound_min_adc).publish_state(id(sound_min_sample));
           id(sound_max_adc).publish_state(id(sound_max_sample));
+
+          if (id(sound_calibration_mode) != 0) {
+            if (peak > id(sound_calibration_peak)) {
+              id(sound_calibration_peak) = peak;
+            }
+
+            if (now >= id(sound_calibration_until_ms)) {
+              const int captured_peak = id(sound_calibration_peak);
+
+              if (id(sound_calibration_mode) == 1) {
+                float new_floor = (float) captured_peak;
+                const float ceiling = id(sound_level_ceiling_adc).state;
+                if (!isnan(ceiling) && new_floor >= ceiling) {
+                  new_floor = std::max(0.0f, ceiling - 1.0f);
+                }
+
+                auto call = id(sound_level_floor_adc).make_call();
+                call.set_value(new_floor);
+                call.perform();
+              } else if (id(sound_calibration_mode) == 2) {
+                float new_ceiling = (float) captured_peak;
+                const float floor = id(sound_level_floor_adc).state;
+                if (!isnan(floor) && new_ceiling <= floor) {
+                  new_ceiling = floor + 1.0f;
+                }
+
+                auto call = id(sound_level_ceiling_adc).make_call();
+                call.set_value(new_ceiling);
+                call.perform();
+              }
+
+              id(sound_calibration_mode) = 0;
+              id(sound_calibration_until_ms) = 0;
+            }
+          }
 
           if (peak >= (int) id(sound_threshold_adc).state) {
             id(sound_hold_until_ms) = now + (uint32_t) id(sound_hold_ms).state;

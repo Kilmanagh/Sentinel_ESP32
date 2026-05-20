@@ -305,6 +305,11 @@ If you are using the ESPHome trial YAML, you can also expose:
 - `Sound dB Ceiling`
 - `Sound Level %`
 - `Sound Approx dB`
+- `Sound Calibration Capture Duration`
+- `Capture Quiet Baseline`
+- `Capture Loud Reference`
+- `Sound Calibration Status`
+- `Sound Calibration Captured Peak`
 - `Enable Smoke Alarm Sensing`
 - `Smoke Alarm Tone Threshold`
 - `Smoke Alarm Min Peak ADC`
@@ -341,6 +346,11 @@ For the ESPHome trial calibration entities:
 - `Sound dB Ceiling`: The approximate dB value you want mapped to `100%`.
 - `Sound Level %`: Relative loudness scaled between the floor and ceiling ADC values.
 - `Sound Approx dB`: A linear estimate derived from `Sound Level %` and the dB floor/ceiling values.
+- `Sound Calibration Capture Duration`: How long the assisted calibration buttons listen before saving a captured value.
+- `Capture Quiet Baseline`: Starts a timed quiet-room capture and writes the result into `Sound Level Floor ADC`.
+- `Capture Loud Reference`: Starts a timed loud-reference capture and writes the result into `Sound Level Ceiling ADC`.
+- `Sound Calibration Status`: Shows whether the device is idle or currently capturing quiet or loud sound.
+- `Sound Calibration Captured Peak`: Shows the highest peak captured during the current assisted calibration run.
 
 Important distinction:
 
@@ -348,6 +358,11 @@ Important distinction:
 - `Sound Level Floor ADC` and `Sound Level Ceiling ADC` only control how the relative `Sound Level %` display is scaled from quiet to loud.
 
 The percentage display does not trigger detection by itself.
+
+You can now calibrate in two ways:
+
+- assisted manual: use the capture buttons to fill in a first floor and ceiling automatically from live sound
+- direct manual: edit `Sound Level Floor ADC`, `Sound Level Ceiling ADC`, and `Sound Threshold ADC` yourself for final tuning
 
 For the ESPHome smoke alarm detector:
 
@@ -395,6 +410,25 @@ If the sound event stays active too long:
 
 Use this only if you want a relative sound level display in the ESPHome trial.
 
+#### Assisted manual calibration
+
+This is the easiest way to get a first working floor and ceiling.
+
+1. Set `Sound Calibration Capture Duration` to a useful window such as `10000 ms`.
+2. Keep the room in its normal quiet state.
+3. Press `Capture Quiet Baseline`.
+4. Watch `Sound Calibration Status` until it returns to `Idle`.
+5. The captured value is written into `Sound Level Floor ADC`.
+6. Make a repeatable loud sound near the device.
+7. Press `Capture Loud Reference`.
+8. Wait for `Sound Calibration Status` to return to `Idle`.
+9. The captured value is written into `Sound Level Ceiling ADC`.
+10. Fine tune the floor, ceiling, and `Sound Threshold ADC` manually if needed.
+
+During capture, `Sound Calibration Captured Peak` shows the highest peak seen so far.
+
+#### Direct manual calibration
+
 1. Let the room sit in its normal quiet state.
 2. Watch `Sound Peak ADC` for 30-60 seconds and note the typical quiet value.
 3. Set `Sound Level Floor ADC` just above that quiet baseline.
@@ -419,6 +453,8 @@ This gives you:
 - an approximate dB figure mapped linearly between those points
 
 You still choose `Sound Threshold ADC` separately based on when you want `Sound Intrusion` to trigger.
+
+The assisted buttons are a starting point, not a lock-in. You can still manually adjust any captured value afterward.
 
 Important limits:
 
