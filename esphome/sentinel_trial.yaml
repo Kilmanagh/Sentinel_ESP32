@@ -418,7 +418,6 @@ switch:
   - platform: template
     name: Enable PIR Sensing
     id: pir_enable_switch
-    entity_category: config
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     turn_on_action:
@@ -437,7 +436,6 @@ switch:
   - platform: template
     name: Enable Sound Sensing
     id: sound_enable_switch
-    entity_category: config
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     turn_on_action:
@@ -469,7 +467,6 @@ switch:
   - platform: template
     name: Enable Smoke Alarm Sensing
     id: smoke_alarm_enable_switch
-    entity_category: config
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
@@ -811,7 +808,6 @@ text_sensor:
 button:
   - platform: template
     name: Capture Quiet Baseline
-    entity_category: config
     on_press:
       then:
         - lambda: |-
@@ -821,7 +817,6 @@ button:
 
   - platform: template
     name: Capture Loud Reference
-    entity_category: config
     on_press:
       then:
         - lambda: |-
@@ -831,7 +826,6 @@ button:
 
   - platform: template
     name: Reset Detection State
-    entity_category: config
     on_press:
       then:
         - script.execute: reset_runtime_states
