@@ -13,8 +13,6 @@
 substitutions:
   device_name: sentinel-trial
   friendly_name: Sentinel Trial
-  wifi_ssid: YOUR_WIFI_SSID
-  wifi_password: YOUR_WIFI_PASSWORD
   fallback_ap_password: change-me-1234
 
 esphome:
@@ -46,8 +44,8 @@ api:
 ota:
 
 wifi:
-  ssid: ${wifi_ssid}
-  password: ${wifi_password}
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
   # Uncomment and edit if you want a fixed LAN address.
   # manual_ip:
   #   static_ip: 192.168.1.50
