@@ -342,6 +342,13 @@ For the ESPHome trial calibration entities:
 - `Sound Level %`: Relative loudness scaled between the floor and ceiling ADC values.
 - `Sound Approx dB`: A linear estimate derived from `Sound Level %` and the dB floor/ceiling values.
 
+Important distinction:
+
+- `Sound Threshold ADC` controls whether `Sound Intrusion` turns on.
+- `Sound Level Floor ADC` and `Sound Level Ceiling ADC` only control how the relative `Sound Level %` display is scaled from quiet to loud.
+
+The percentage display does not trigger detection by itself.
+
 For the ESPHome smoke alarm detector:
 
 - `Enable Smoke Alarm Sensing`: Turns the tone-and-cadence detector on or off.
@@ -410,6 +417,8 @@ This gives you:
 - `0%` near your quiet room baseline
 - `100%` near your chosen loud reference
 - an approximate dB figure mapped linearly between those points
+
+You still choose `Sound Threshold ADC` separately based on when you want `Sound Intrusion` to trigger.
 
 Important limits:
 
