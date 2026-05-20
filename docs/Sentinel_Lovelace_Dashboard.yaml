@@ -1,0 +1,346 @@
+# Sentinel ESPHome Lovelace dashboard
+#
+# Usage:
+# 1. In Home Assistant, go to Settings > Dashboards.
+# 2. Create a new dashboard or open an existing YAML dashboard.
+# 3. Paste this file's contents into the dashboard YAML editor.
+# 4. If your entity IDs differ, update the `entities:` values below.
+#
+# This dashboard uses built-in Lovelace cards only.
+
+title: Sentinel
+views:
+  - title: Overview
+    path: sentinel-overview
+    icon: mdi:home-analytics
+    cards:
+      - type: grid
+        title: Live Status
+        columns: 4
+        square: false
+        cards:
+          - type: tile
+            entity: binary_sensor.sentinel_motion
+            name: Motion
+            features_position: bottom
+            vertical: false
+          - type: tile
+            entity: binary_sensor.sentinel_door
+            name: Door
+            features_position: bottom
+            vertical: false
+          - type: tile
+            entity: binary_sensor.sentinel_sound_intrusion
+            name: Sound Intrusion
+            features_position: bottom
+            vertical: false
+          - type: tile
+            entity: binary_sensor.sentinel_smoke_alarm_detected
+            name: Smoke Alarm
+            features_position: bottom
+            vertical: false
+          - type: tile
+            entity: switch.sentinel_enable_pir_sensing
+            name: PIR Sensing
+            features_position: bottom
+            vertical: false
+          - type: tile
+            entity: switch.sentinel_enable_sound_sensing
+            name: Sound Sensing
+            features_position: bottom
+            vertical: false
+          - type: tile
+            entity: switch.sentinel_enable_smoke_alarm_sensing
+            name: Smoke Alarm Sensing
+            features_position: bottom
+            vertical: false
+          - type: tile
+            entity: binary_sensor.sentinel_status
+            name: Device Status
+            features_position: bottom
+            vertical: false
+
+      - type: grid
+        title: Environment
+        columns: 3
+        square: false
+        cards:
+          - type: gauge
+            entity: sensor.sentinel_temperature
+            name: Temperature
+            min: 50
+            max: 95
+            severity:
+              green: 68
+              yellow: 78
+              red: 85
+          - type: gauge
+            entity: sensor.sentinel_humidity
+            name: Humidity
+            min: 0
+            max: 100
+            severity:
+              green: 35
+              yellow: 60
+              red: 75
+          - type: gauge
+            entity: sensor.sentinel_iaq_score
+            name: IAQ Score
+            min: 0
+            max: 100
+            severity:
+              red: 0
+              yellow: 50
+              green: 80
+          - type: tile
+            entity: sensor.sentinel_pressure
+            name: Pressure
+          - type: tile
+            entity: sensor.sentinel_comfort_index
+            name: Comfort Index
+          - type: tile
+            entity: text_sensor.sentinel_comfort_level
+            name: Comfort Level
+          - type: tile
+            entity: text_sensor.sentinel_air_quality
+            name: Air Quality
+          - type: tile
+            entity: sensor.sentinel_wifi_rssi
+            name: WiFi RSSI
+          - type: tile
+            entity: sensor.sentinel_uptime
+            name: Uptime
+
+      - type: history-graph
+        title: Environment Trends
+        hours_to_show: 24
+        refresh_interval: 60
+        entities:
+          - entity: sensor.sentinel_temperature
+            name: Temperature
+          - entity: sensor.sentinel_humidity
+            name: Humidity
+          - entity: sensor.sentinel_pressure
+            name: Pressure
+
+      - type: grid
+        title: Sound and Alarm Readouts
+        columns: 3
+        square: false
+        cards:
+          - type: gauge
+            entity: sensor.sentinel_sound_level
+            name: Sound Level %
+            min: 0
+            max: 100
+            severity:
+              green: 0
+              yellow: 35
+              red: 70
+          - type: gauge
+            entity: sensor.sentinel_sound_approx_db
+            name: Approx dB
+            min: 0
+            max: 110
+            severity:
+              green: 0
+              yellow: 55
+              red: 80
+          - type: gauge
+            entity: sensor.sentinel_smoke_alarm_tone_score
+            name: Smoke Tone Score
+            min: 0
+            max: 100
+            severity:
+              green: 0
+              yellow: 20
+              red: 40
+          - type: tile
+            entity: sensor.sentinel_sound_peak_adc
+            name: Sound Peak ADC
+          - type: tile
+            entity: sensor.sentinel_sound_min_adc
+            name: Sound Min ADC
+          - type: tile
+            entity: sensor.sentinel_sound_max_adc
+            name: Sound Max ADC
+          - type: tile
+            entity: sensor.sentinel_smoke_alarm_beep_count
+            name: Smoke Beep Count
+          - type: tile
+            entity: sensor.sentinel_smoke_alarm_last_beep_age
+            name: Last Beep Age
+          - type: tile
+            entity: text_sensor.sentinel_sound_calibration_status
+            name: Calibration Status
+          - type: tile
+            entity: sensor.sentinel_sound_calibration_captured_peak
+            name: Captured Peak
+
+      - type: history-graph
+        title: Sound Trends
+        hours_to_show: 6
+        refresh_interval: 30
+        entities:
+          - entity: sensor.sentinel_sound_level
+            name: Sound Level %
+          - entity: sensor.sentinel_sound_approx_db
+            name: Approx dB
+          - entity: sensor.sentinel_smoke_alarm_tone_score
+            name: Smoke Tone Score
+
+  - title: Settings
+    path: sentinel-settings
+    icon: mdi:tune-vertical
+    cards:
+      - type: entities
+        title: PIR Tuning
+        show_header_toggle: false
+        entities:
+          - entity: switch.sentinel_enable_pir_sensing
+            name: Enable PIR Sensing
+          - entity: number.sentinel_pir_warmup
+            name: PIR Warmup
+          - entity: number.sentinel_pir_detect_stable
+            name: PIR Detect Stable
+          - entity: number.sentinel_pir_clear_stable
+            name: PIR Clear Stable
+          - entity: number.sentinel_pir_hold
+            name: PIR Hold
+
+      - type: entities
+        title: Sound Detection Tuning
+        show_header_toggle: false
+        entities:
+          - entity: switch.sentinel_enable_sound_sensing
+            name: Enable Sound Sensing
+          - entity: number.sentinel_sound_sample_window
+            name: Sound Sample Window
+          - entity: number.sentinel_sound_hold
+            name: Sound Hold
+          - entity: number.sentinel_sound_threshold_adc
+            name: Sound Threshold ADC
+          - entity: number.sentinel_sound_level_floor_adc
+            name: Sound Level Floor ADC
+          - entity: number.sentinel_sound_level_ceiling_adc
+            name: Sound Level Ceiling ADC
+          - entity: number.sentinel_sound_db_floor
+            name: Sound dB Floor
+          - entity: number.sentinel_sound_db_ceiling
+            name: Sound dB Ceiling
+
+      - type: entities
+        title: Assisted Sound Calibration
+        show_header_toggle: false
+        entities:
+          - entity: number.sentinel_sound_calibration_capture_duration
+            name: Capture Duration
+          - entity: button.sentinel_capture_quiet_baseline
+            name: Capture Quiet Baseline
+          - entity: button.sentinel_capture_loud_reference
+            name: Capture Loud Reference
+          - entity: text_sensor.sentinel_sound_calibration_status
+            name: Calibration Status
+          - entity: sensor.sentinel_sound_calibration_captured_peak
+            name: Captured Peak
+
+      - type: entities
+        title: Smoke Alarm Tuning
+        show_header_toggle: false
+        entities:
+          - entity: switch.sentinel_enable_smoke_alarm_sensing
+            name: Enable Smoke Alarm Sensing
+          - entity: number.sentinel_smoke_alarm_tone_threshold
+            name: Smoke Alarm Tone Threshold
+          - entity: number.sentinel_smoke_alarm_min_peak_adc
+            name: Smoke Alarm Min Peak ADC
+          - entity: number.sentinel_smoke_alarm_confirm_beeps
+            name: Smoke Alarm Confirm Beeps
+          - entity: number.sentinel_smoke_alarm_hold
+            name: Smoke Alarm Hold
+          - entity: sensor.sentinel_smoke_alarm_tone_score
+            name: Smoke Alarm Tone Score
+          - entity: sensor.sentinel_smoke_alarm_beep_count
+            name: Smoke Alarm Beep Count
+          - entity: sensor.sentinel_smoke_alarm_last_beep_age
+            name: Smoke Alarm Last Beep Age
+
+      - type: horizontal-stack
+        cards:
+          - type: button
+            entity: button.sentinel_reset_detection_state
+            name: Reset Detection State
+            icon: mdi:restart-alert
+            tap_action:
+              action: toggle
+          - type: button
+            entity: button.sentinel_restart
+            name: Restart Device
+            icon: mdi:restart
+            tap_action:
+              action: toggle
+
+  - title: Troubleshooting
+    path: sentinel-troubleshooting
+    icon: mdi:stethoscope
+    cards:
+      - type: markdown
+        title: Quick Checks
+        content: |
+          ## If sound detection is too sensitive
+
+          - Raise `Sound Threshold ADC`
+          - Raise `Sound Level Floor ADC` only if the percentage display is too high at rest
+          - Leave `Sound Level Ceiling ADC` for loud-reference scaling, not detection
+
+          ## If sound detection misses events
+
+          - Lower `Sound Threshold ADC`
+          - Shorten `Sound Sample Window` if you want faster transient capture
+          - Re-run `Capture Loud Reference` if the loud baseline is outdated
+
+          ## If smoke alarm detection false-triggers
+
+          - Raise `Smoke Alarm Tone Threshold`
+          - Raise `Smoke Alarm Min Peak ADC`
+          - Raise `Smoke Alarm Confirm Beeps`
+
+          ## If smoke alarm detection misses test tones
+
+          - Lower `Smoke Alarm Tone Threshold`
+          - Lower `Smoke Alarm Min Peak ADC`
+          - Watch `Smoke Alarm Tone Score`, `Smoke Alarm Beep Count`, and `Smoke Alarm Last Beep Age`
+
+      - type: entities
+        title: Troubleshooting Readouts
+        show_header_toggle: false
+        entities:
+          - entity: sensor.sentinel_sound_peak_adc
+            name: Sound Peak ADC
+          - entity: sensor.sentinel_sound_level
+            name: Sound Level %
+          - entity: sensor.sentinel_sound_approx_db
+            name: Sound Approx dB
+          - entity: sensor.sentinel_smoke_alarm_tone_score
+            name: Smoke Alarm Tone Score
+          - entity: sensor.sentinel_smoke_alarm_beep_count
+            name: Smoke Alarm Beep Count
+          - entity: sensor.sentinel_smoke_alarm_last_beep_age
+            name: Smoke Alarm Last Beep Age
+          - entity: text_sensor.sentinel_sound_calibration_status
+            name: Sound Calibration Status
+          - entity: sensor.sentinel_sound_calibration_captured_peak
+            name: Sound Calibration Captured Peak
+
+      - type: entities
+        title: Recovery Actions
+        show_header_toggle: false
+        entities:
+          - entity: button.sentinel_capture_quiet_baseline
+            name: Capture Quiet Baseline
+          - entity: button.sentinel_capture_loud_reference
+            name: Capture Loud Reference
+          - entity: button.sentinel_reset_detection_state
+            name: Reset Detection State
+          - entity: button.sentinel_restart
+            name: Restart Device
