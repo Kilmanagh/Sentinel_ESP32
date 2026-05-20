@@ -311,6 +311,8 @@ If you are using the ESPHome trial YAML, you can also expose:
 - `Smoke Alarm Hold`
 - `Smoke Alarm Confirm Beeps`
 - `Smoke Alarm Tone Score`
+- `Smoke Alarm Beep Count`
+- `Smoke Alarm Last Beep Age`
 - `Smoke Alarm Detected`
 
 ### Serial config keys
@@ -348,6 +350,8 @@ For the ESPHome smoke alarm detector:
 - `Smoke Alarm Hold`: How long `Smoke Alarm Detected` stays on after a valid alarm pattern is seen.
 - `Smoke Alarm Confirm Beeps`: How many valid beeps must be seen close together before the alarm is declared.
 - `Smoke Alarm Tone Score`: Best-effort score showing how much the captured audio resembles the target alarm frequencies.
+- `Smoke Alarm Beep Count`: How many qualifying beeps are currently in the active detection sequence.
+- `Smoke Alarm Last Beep Age`: How long it has been since the last qualifying beep was seen.
 - `Smoke Alarm Detected`: Binary result of the smoke alarm detector.
 
 `Sound Level %` and `Sound Approx dB` are calibration outputs. They are not true SPL meter readings.
@@ -436,11 +440,19 @@ Use it for automation and notifications, not as a substitute for a listed smoke 
 
 1. Turn on `Enable Smoke Alarm Sensing`.
 2. Test with a real smoke alarm test tone if possible.
-3. Watch `Smoke Alarm Tone Score` during the beep.
+3. Watch `Smoke Alarm Tone Score`, `Smoke Alarm Beep Count`, and `Smoke Alarm Last Beep Age` during the beep.
 4. Adjust `Smoke Alarm Tone Threshold` so normal room sounds stay below it and the alarm tone rises above it.
 5. Adjust `Smoke Alarm Min Peak ADC` if distant speech or short clatter still triggers the tone detector.
 6. Adjust `Smoke Alarm Confirm Beeps` if you want detection faster or slower.
 7. Adjust `Smoke Alarm Hold` last for Home Assistant behavior.
+
+How to read the debug sensors:
+
+- `Smoke Alarm Tone Score` should rise during the alarm beep and stay lower during normal room sound.
+- `Smoke Alarm Beep Count` should climb toward your `Smoke Alarm Confirm Beeps` setting during a real alarm sequence.
+- `Smoke Alarm Last Beep Age` should stay relatively low between real alarm beeps and then grow once the pattern stops.
+
+If `Smoke Alarm Tone Score` rises but `Smoke Alarm Beep Count` does not increase, the cadence is not matching closely enough or the minimum peak threshold is still too strict.
 
 ### Smoke alarm starting points
 

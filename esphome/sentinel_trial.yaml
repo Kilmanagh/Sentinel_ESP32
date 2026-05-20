@@ -6,9 +6,6 @@
 # - PIR motion, reed switch door, and MAX9814 sound detection
 # - Runtime tuning through Home Assistant number entities
 #
-# Leaves out on purpose:
-# - Custom MQTT topic/discovery model
-# - Custom serial cfg command interface
 
 substitutions:
   device_name: sentinel
@@ -391,7 +388,7 @@ number:
 
 switch:
   - platform: template
-    name: Enable PIR
+    name: Enable PIR Sensing
     id: pir_enable_switch
     entity_category: config
     optimistic: true
@@ -410,7 +407,7 @@ switch:
           id(pir_motion).publish_state(false);
 
   - platform: template
-    name: Enable Sound
+    name: Enable Sound Sensing
     id: sound_enable_switch
     entity_category: config
     optimistic: true
@@ -641,6 +638,30 @@ sensor:
     icon: mdi:sine-wave
     state_class: measurement
     update_interval: never
+
+  - platform: template
+    name: Smoke Alarm Beep Count
+    id: smoke_alarm_beep_count_sensor
+    icon: mdi:counter
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 1s
+    lambda: |-
+      return (float) id(smoke_alarm_beep_count);
+
+  - platform: template
+    name: Smoke Alarm Last Beep Age
+    id: smoke_alarm_last_beep_age_ms
+    unit_of_measurement: ms
+    icon: mdi:timer-outline
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 1s
+    lambda: |-
+      if (id(smoke_alarm_last_beep_ms) == 0) {
+        return 0.0f;
+      }
+      return (float) (millis() - id(smoke_alarm_last_beep_ms));
 
 binary_sensor:
   - platform: gpio
