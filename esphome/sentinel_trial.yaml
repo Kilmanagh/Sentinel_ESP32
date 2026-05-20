@@ -124,7 +124,7 @@ globals:
 
 number:
   - platform: template
-    name: ${friendly_name} PIR Warmup
+    name: PIR Warmup
     id: pir_warmup_ms
     unit_of_measurement: ms
     entity_category: config
@@ -137,7 +137,7 @@ number:
     mode: box
 
   - platform: template
-    name: ${friendly_name} PIR Detect Stable
+    name: PIR Detect Stable
     id: pir_detect_stable_ms
     unit_of_measurement: ms
     entity_category: config
@@ -150,7 +150,7 @@ number:
     mode: box
 
   - platform: template
-    name: ${friendly_name} PIR Clear Stable
+    name: PIR Clear Stable
     id: pir_clear_stable_ms
     unit_of_measurement: ms
     entity_category: config
@@ -163,7 +163,7 @@ number:
     mode: box
 
   - platform: template
-    name: ${friendly_name} PIR Hold
+    name: PIR Hold
     id: pir_hold_ms
     unit_of_measurement: ms
     entity_category: config
@@ -176,7 +176,7 @@ number:
     mode: box
 
   - platform: template
-    name: ${friendly_name} Sound Sample Window
+    name: Sound Sample Window
     id: sound_sample_window_ms
     unit_of_measurement: ms
     entity_category: config
@@ -189,7 +189,7 @@ number:
     mode: box
 
   - platform: template
-    name: ${friendly_name} Sound Hold
+    name: Sound Hold
     id: sound_hold_ms
     unit_of_measurement: ms
     entity_category: config
@@ -202,7 +202,7 @@ number:
     mode: box
 
   - platform: template
-    name: ${friendly_name} Sound Threshold ADC
+    name: Sound Threshold ADC
     id: sound_threshold_adc
     unit_of_measurement: adc
     entity_category: config
@@ -216,7 +216,7 @@ number:
 
 switch:
   - platform: template
-    name: ${friendly_name} Enable PIR
+    name: Enable PIR
     id: pir_enable_switch
     entity_category: config
     optimistic: true
@@ -235,7 +235,7 @@ switch:
           id(pir_motion).publish_state(false);
 
   - platform: template
-    name: ${friendly_name} Enable Sound
+    name: Enable Sound
     id: sound_enable_switch
     entity_category: config
     optimistic: true
@@ -261,7 +261,7 @@ sensor:
     address: 0x76
     update_interval: 30s
     temperature:
-      name: ${friendly_name} Temperature
+      name: Temperature
       id: bme_temperature_f
       unit_of_measurement: "°F"
       device_class: temperature
@@ -269,25 +269,95 @@ sensor:
       filters:
         - lambda: return x * 9.0f / 5.0f + 32.0f;
     pressure:
-      name: ${friendly_name} Pressure
+      name: Pressure
+      id: bme_pressure_hpa
       unit_of_measurement: hPa
       device_class: atmospheric_pressure
       state_class: measurement
     humidity:
-      name: ${friendly_name} Humidity
+      name: Humidity
+      id: bme_humidity
       device_class: humidity
       state_class: measurement
 
+  - platform: template
+    name: Comfort Index
+    id: comfort_index
+    icon: mdi:thermometer-check
+    accuracy_decimals: 1
+    state_class: measurement
+    update_interval: 30s
+    lambda: |-
+      const float temp_f = id(bme_temperature_f).state;
+      const float humidity = id(bme_humidity).state;
+      if (isnan(temp_f) || isnan(humidity)) {
+        return NAN;
+      }
+
+      float temp_score;
+      if (temp_f >= 70.0f && temp_f <= 76.0f) {
+        temp_score = 100.0f;
+      } else if (temp_f < 70.0f) {
+        temp_score = std::max(0.0f, 100.0f - (70.0f - temp_f) * 5.0f);
+      } else {
+        temp_score = std::max(0.0f, 100.0f - (temp_f - 76.0f) * 5.0f);
+      }
+
+      float humidity_score;
+      if (humidity >= 35.0f && humidity <= 55.0f) {
+        humidity_score = 100.0f;
+      } else if (humidity < 35.0f) {
+        humidity_score = std::max(0.0f, 100.0f - (35.0f - humidity) * 3.0f);
+      } else {
+        humidity_score = std::max(0.0f, 100.0f - (humidity - 55.0f) * 3.0f);
+      }
+
+      return (temp_score * 0.6f) + (humidity_score * 0.4f);
+
+  - platform: template
+    name: IAQ Score
+    id: iaq_score
+    icon: mdi:air-filter
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 30s
+    lambda: |-
+      const float humidity = id(bme_humidity).state;
+      const float pressure_hpa = id(bme_pressure_hpa).state;
+      if (isnan(humidity) || isnan(pressure_hpa)) {
+        return NAN;
+      }
+
+      int humidity_score;
+      if (humidity >= 40.0f && humidity <= 60.0f) {
+        humidity_score = 100;
+      } else if (humidity < 40.0f) {
+        humidity_score = std::max(0, (int) (100.0f - (40.0f - humidity) * 3.0f));
+      } else {
+        humidity_score = std::max(0, (int) (100.0f - (humidity - 60.0f) * 3.5f));
+      }
+
+      int pressure_score;
+      if (pressure_hpa >= 1005.0f && pressure_hpa <= 1025.0f) {
+        pressure_score = 100;
+      } else if (pressure_hpa < 1005.0f) {
+        pressure_score = std::max(0, (int) (100.0f - (1005.0f - pressure_hpa) * 2.0f));
+      } else {
+        pressure_score = std::max(0, (int) (100.0f - (pressure_hpa - 1025.0f) * 2.0f));
+      }
+
+      return (float) ((humidity_score * 70 + pressure_score * 30) / 100);
+
   - platform: wifi_signal
-    name: ${friendly_name} WiFi RSSI
+    name: WiFi RSSI
     update_interval: 60s
 
   - platform: uptime
-    name: ${friendly_name} Uptime
+    name: Uptime
     update_interval: 60s
 
   - platform: template
-    name: ${friendly_name} Sound Peak ADC
+    name: Sound Peak ADC
     id: sound_peak_adc
     unit_of_measurement: adc
     accuracy_decimals: 0
@@ -297,7 +367,7 @@ sensor:
     update_interval: never
 
   - platform: template
-    name: ${friendly_name} Sound Min ADC
+    name: Sound Min ADC
     id: sound_min_adc
     unit_of_measurement: adc
     accuracy_decimals: 0
@@ -307,7 +377,7 @@ sensor:
     update_interval: never
 
   - platform: template
-    name: ${friendly_name} Sound Max ADC
+    name: Sound Max ADC
     id: sound_max_adc
     unit_of_measurement: adc
     accuracy_decimals: 0
@@ -340,12 +410,12 @@ binary_sensor:
             }
 
   - platform: template
-    name: ${friendly_name} Motion
+    name: Motion
     id: pir_motion
     device_class: motion
 
   - platform: gpio
-    name: ${friendly_name} Door
+    name: Door
     device_class: door
     pin:
       number: 32
@@ -357,23 +427,53 @@ binary_sensor:
       - delayed_off: 50ms
 
   - platform: template
-    name: ${friendly_name} Sound Intrusion
+    name: Sound Intrusion
     id: sound_intrusion
     device_class: sound
 
   - platform: status
-    name: ${friendly_name} Status
+    name: Status
 
 text_sensor:
+  - platform: template
+    name: Comfort Level
+    icon: mdi:emoticon-outline
+    update_interval: 30s
+    lambda: |-
+      const float index = id(comfort_index).state;
+      if (isnan(index)) {
+        return {};
+      }
+      if (index >= 85.0f) return {"Excellent"};
+      if (index >= 70.0f) return {"Good"};
+      if (index >= 50.0f) return {"Fair"};
+      if (index >= 30.0f) return {"Poor"};
+      return {"Critical"};
+
+  - platform: template
+    name: Air Quality
+    icon: mdi:leaf
+    update_interval: 30s
+    lambda: |-
+      const float score = id(iaq_score).state;
+      if (isnan(score)) {
+        return {};
+      }
+      if (score >= 85.0f) return {"Excellent"};
+      if (score >= 70.0f) return {"Good"};
+      if (score >= 50.0f) return {"Moderate"};
+      if (score >= 30.0f) return {"Poor"};
+      return {"Hazardous"};
+
   - platform: wifi_info
     ip_address:
-      name: ${friendly_name} IP Address
+      name: IP Address
     ssid:
-      name: ${friendly_name} WiFi SSID
+      name: WiFi SSID
 
 button:
   - platform: restart
-    name: ${friendly_name} Restart
+    name: Restart
 
 interval:
   - interval: 50ms
