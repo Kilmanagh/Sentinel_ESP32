@@ -167,32 +167,32 @@ script:
           id(sound_peak_to_peak_adc_raw) = 0;
           id(sound_hold_until_ms) = 0;
           id(sound_intrusion_state) = false;
-            id(smoke_alarm_state) = false;
-            id(smoke_alarm_tone_active) = false;
-            id(smoke_alarm_last_beep_ms) = 0;
-            id(smoke_alarm_hold_until_ms) = 0;
-            id(smoke_alarm_beep_count) = 0;
-          - binary_sensor.template.publish:
-            id: pir_motion
-            state: false
-          - binary_sensor.template.publish:
-            id: sound_intrusion
-            state: false
-          - binary_sensor.template.publish:
-            id: smoke_alarm_detected
-            state: false
-          - sensor.template.publish:
-            id: sound_peak_adc
-            state: 0
-          - sensor.template.publish:
-            id: sound_min_adc
-            state: 0
-          - sensor.template.publish:
-            id: sound_max_adc
-            state: 0
-          - sensor.template.publish:
-            id: smoke_alarm_tone_score
-            state: 0
+          id(smoke_alarm_state) = false;
+          id(smoke_alarm_tone_active) = false;
+          id(smoke_alarm_last_beep_ms) = 0;
+          id(smoke_alarm_hold_until_ms) = 0;
+          id(smoke_alarm_beep_count) = 0;
+      - binary_sensor.template.publish:
+          id: pir_motion
+          state: false
+      - binary_sensor.template.publish:
+          id: sound_intrusion
+          state: false
+      - binary_sensor.template.publish:
+          id: smoke_alarm_detected
+          state: false
+      - sensor.template.publish:
+          id: sound_peak_adc
+          state: 0
+      - sensor.template.publish:
+          id: sound_min_adc
+          state: 0
+      - sensor.template.publish:
+          id: sound_max_adc
+          state: 0
+      - sensor.template.publish:
+          id: smoke_alarm_tone_score
+          state: 0
 
 number:
   - platform: template
