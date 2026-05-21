@@ -5,6 +5,7 @@ Sentinel is an ESP32-based multi-sensor node for Home Assistant with MQTT auto-d
 ## Current firmware
 
 - Firmware source: `src/main.cpp`
+- ESPHome config: `esphome/sentinel.yaml`
 - Build system: PlatformIO (`esp32dev`)
 - MQTT base: `sentinel/<device_id>/...`
 - Runtime config storage: ESP32 NVS (`sentinel_cfg` namespace)

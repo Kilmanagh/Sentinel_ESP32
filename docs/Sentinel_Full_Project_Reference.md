@@ -5,6 +5,7 @@ This is the high-level reference for the current Sentinel ESP32 firmware. Use it
 ## Firmware summary
 
 - Source file: `src/main.cpp`
+- ESPHome config file: `esphome/sentinel.yaml`
 - Build system: PlatformIO
 - Board target: `esp32dev`
 - Home Assistant integration: MQTT auto-discovery

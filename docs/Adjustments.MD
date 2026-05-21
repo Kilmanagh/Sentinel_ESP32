@@ -297,7 +297,7 @@ What the firmware can tune is:
 - `Sentinel Sound Hold`
 - `Sentinel Sound Threshold`
 
-If you are using the ESPHome trial YAML, you can also expose:
+If you are using the ESPHome config at `esphome/sentinel.yaml`, you can also expose:
 
 - `Sound Level Floor ADC`
 - `Sound Level Ceiling ADC`
@@ -344,7 +344,7 @@ If you are using the ESPHome trial YAML, you can also expose:
 - `sound_hold_ms`: After a sound intrusion is detected, keep the binary sensor active for this long before clearing.
 - `sound_threshold_adc`: Required peak-to-peak ADC swing needed to declare sound intrusion.
 
-For the ESPHome trial calibration entities:
+For the ESPHome calibration entities in `esphome/sentinel.yaml`:
 
 - `Sound Level Floor ADC`: The peak-to-peak value that should be treated as `0%` sound.
 - `Sound Level Ceiling ADC`: The peak-to-peak value that should be treated as `100%` sound.
@@ -418,7 +418,7 @@ If the sound event stays active too long:
 
 ### Calibrating Sound Level % and Approx dB
 
-Use this only if you want a relative sound level display in the ESPHome trial.
+Use this only if you want a relative sound level display in `esphome/sentinel.yaml`.
 
 #### Assisted manual calibration
 
