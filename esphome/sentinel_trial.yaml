@@ -590,16 +590,92 @@ switch:
       - light.turn_off: status_pixel
 
   - platform: template
-    name: Status LEDs
+    name: Enable PIR Sensing
     id: pir_enable_switch
     optimistic: true
-    num_leds: 3
+    restore_mode: RESTORE_DEFAULT_ON
     turn_on_action:
       - lambda: |-
           id(pir_enabled) = true;
           id(pir_warmup_until_ms) = millis() + (uint32_t) id(pir_warmup_ms).state;
     turn_off_action:
       - lambda: |-
+          id(pir_enabled) = false;
+          id(pir_motion_state) = false;
+          id(pir_high_since_ms) = 0;
+          id(pir_low_since_ms) = 0;
+          id(pir_hold_until_ms) = 0;
+          id(pir_motion).publish_state(false);
+
+  - platform: template
+    name: Enable Sound Sensing
+    id: sound_enable_switch
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - lambda: |-
+          id(sound_enabled) = true;
+          id(sound_window_start_ms) = 0;
+    turn_off_action:
+      - lambda: |-
+          id(sound_enabled) = false;
+          id(sound_intrusion_state) = false;
+          id(sound_calibration_mode) = 0;
+          id(sound_calibration_until_ms) = 0;
+          id(sound_calibration_peak) = 0;
+          id(sound_window_start_ms) = 0;
+          id(sound_hold_until_ms) = 0;
+          id(sound_peak_to_peak_adc_raw) = 0;
+          id(sound_intrusion).publish_state(false);
+          id(sound_peak_adc).publish_state(0);
+          id(sound_min_adc).publish_state(0);
+          id(sound_max_adc).publish_state(0);
+          id(smoke_alarm_state) = false;
+          id(smoke_alarm_tone_active) = false;
+          id(smoke_alarm_last_beep_ms) = 0;
+          id(smoke_alarm_hold_until_ms) = 0;
+          id(smoke_alarm_beep_count) = 0;
+          id(smoke_alarm_detected).publish_state(false);
+          id(smoke_alarm_tone_score).publish_state(0);
+
+  - platform: template
+    name: Enable Smoke Alarm Sensing
+    id: smoke_alarm_enable_switch
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: |-
+          id(smoke_alarm_enabled) = true;
+          id(smoke_alarm_state) = false;
+          id(smoke_alarm_tone_active) = false;
+          id(smoke_alarm_last_beep_ms) = 0;
+          id(smoke_alarm_hold_until_ms) = 0;
+          id(smoke_alarm_beep_count) = 0;
+          id(smoke_alarm_detected).publish_state(false);
+          id(smoke_alarm_tone_score).publish_state(0);
+    turn_off_action:
+      - lambda: |-
+          id(smoke_alarm_enabled) = false;
+          id(smoke_alarm_state) = false;
+          id(smoke_alarm_tone_active) = false;
+          id(smoke_alarm_last_beep_ms) = 0;
+          id(smoke_alarm_hold_until_ms) = 0;
+          id(smoke_alarm_beep_count) = 0;
+          id(smoke_alarm_detected).publish_state(false);
+          id(smoke_alarm_tone_score).publish_state(0);
+
+light:
+  - platform: esp32_rmt_led_strip
+    name: Status LEDs
+    id: status_pixel
+    pin: ${status_pixel_pin}
+    num_leds: 3
+    chipset: WS2812
+    rgb_order: ${status_pixel_rgb_order}
+    default_transition_length: 0s
+    restore_mode: ALWAYS_OFF
+    entity_category: diagnostic
+    effects:
       - addressable_lambda:
           name: Auto Status Layout
           update_interval: 250ms
@@ -777,12 +853,10 @@ switch:
             bright = !bright;
             it.all() = Color::BLACK;
             it[0] = bright ? Color(46, 0, 46) : Color(8, 0, 8);
-
       - addressable_rainbow:
           name: Test Rainbow
           speed: 8
           width: 40
-
       - addressable_lambda:
           name: Full Status Preview
           update_interval: 900ms
