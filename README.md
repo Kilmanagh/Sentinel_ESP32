@@ -1,40 +1,50 @@
 # Sentinel ESP32
 
-Sentinel is an ESP32-based multi-sensor node for Home Assistant with MQTT auto-discovery, runtime-tunable detection logic, and a lightweight BLE presence watchlist.
+Sentinel is an ESP32-based multi-sensor node built around ESPHome and Home Assistant.
+
+The active implementation lives in `esphome/sentinel.yaml`. The old PlatformIO project in `pio-ARCHIVE/` is deprecated and is no longer the source of truth.
 
 ## Current firmware
 
-- Firmware source: `src/main.cpp`
-- ESPHome config: `esphome/sentinel.yaml`
-- Build system: PlatformIO (`esp32dev`)
-- MQTT base: `sentinel/<device_id>/...`
-- Runtime config storage: ESP32 NVS (`sentinel_cfg` namespace)
+- Active config: `esphome/sentinel.yaml`
+- Secrets file: `esphome/secrets.yaml`
+- Board target: `esp32dev`
+- Framework: ESPHome on Arduino
+- Home Assistant integration: native ESPHome API
+- Device services: Wi-Fi, OTA, web server, local fallback AP, and Home Assistant entity-based runtime tuning
 
 ## Features
 
-- BME280 environment telemetry over MQTT
-- AM312 PIR motion detection with warmup, debounce, and hold timing
+- BME280 environment telemetry
+- AM312 PIR motion detection with warmup, stable-detect, stable-clear, and hold timing
 - MAX9814 sound intrusion detection using peak-to-peak sampling
 - Reed switch door state reporting
-- Home Assistant MQTT auto-discovery
-- Runtime configuration through Home Assistant MQTT entities and serial `cfg` commands
-- BLE watchlist presence tracking using iBeacon `UUID + major + minor`
-- Serial iBeacon enrollment logging with `ble enroll on`
+- Sound-level calibration helpers and approximate dB display
+- Smoke alarm tone and cadence detection
+- Device-health diagnostics and fault indicators
+- Three-pixel WS2812 status LED strip plus onboard status LED
+- Runtime tuning through Home Assistant entities exposed by ESPHome
 
 ## Primary docs
 
-- `docs/Sentinel_ESP32_Node.md` - firmware overview, build/flash, serial config, BLE enrollment
-- `docs/MQTT_Topic_Map.md` - MQTT state, config, and discovery topics
-- `docs/Adjustments.MD` - PIR, sound, and BLE watchlist tuning guide
-- `docs/Sentinel_Lovelace_Dashboard.md` - Home Assistant dashboard layout, install steps, and troubleshooting view
-- `docs/Sentinel_Home_Assistant_Helpers.md` - Home Assistant package for counters, last-event tracking, and mode helpers
-- `docs/Hardware_Deliverables.md` - hardware package guidance
+- `docs/Adjustments.MD` - active ESPHome tuning, calibration, and sensor-behavior guide
+- `docs/Hardware_Deliverables.md` - current hardware, pin mapping, and LED wiring summary
+- `docs/Sentinel_Home_Assistant_Helpers.md` - optional Home Assistant helper package for counters, mode helpers, and last-event tracking
+- `docs/Sentinel_Lovelace_Dashboard.md` - dashboard layout, setup, and troubleshooting view
+- `docs/Sentinel_Lovelace_Dashboard.yaml` - Lovelace YAML for the dashboard itself
 
-## Build and flash
+## Deploy
 
-```powershell
-& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -d "d:\Source Code\ESP32\Sent" -e esp32dev
-& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -d "d:\Source Code\ESP32\Sent" -e esp32dev -t upload --upload-port COM6
-```
+Use ESPHome to validate and install `esphome/sentinel.yaml`.
 
-Adjust `COM6` to the active ESP32 port if needed.
+Typical workflow:
+
+1. Fill in `esphome/secrets.yaml` with your Wi-Fi credentials.
+2. Open `esphome/sentinel.yaml` in ESPHome or the Home Assistant ESPHome add-on.
+3. Validate the config.
+4. Install over USB for first flash, then use OTA afterward if desired.
+
+## Notes
+
+- The active docs no longer use the old MQTT, serial `cfg`, or BLE watchlist workflow.
+- If you need historical PlatformIO material, keep it isolated under `pio-ARCHIVE/`.
