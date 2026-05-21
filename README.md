@@ -28,7 +28,6 @@ Sentinel is an ESP32-based multi-sensor node for Home Assistant with MQTT auto-d
 - `docs/Adjustments.MD` - PIR, sound, and BLE watchlist tuning guide
 - `docs/Sentinel_Lovelace_Dashboard.md` - Home Assistant dashboard layout, install steps, and troubleshooting view
 - `docs/Sentinel_Home_Assistant_Helpers.md` - Home Assistant package for counters, last-event tracking, and mode helpers
-- `docs/Sentinel_Full_Project_Reference.md` - high-level hardware, firmware, and integration reference
 - `docs/Hardware_Deliverables.md` - hardware package guidance
 
 ## Build and flash
