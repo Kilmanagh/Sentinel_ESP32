@@ -589,6 +589,68 @@ The ESPHome build now also exposes node-health diagnostics so you can tell wheth
 - If it shows `Sensor Trouble`, check whether the BME280 values are unavailable or wiring is intermittent.
 - If it shows `Low Memory` or `Memory Fragmented`, treat that as a firmware stability warning and avoid adding more heavy features until the memory picture is understood.
 
+## Status Pixel
+
+The ESPHome build can now drive a single WS2812 status pixel for visual state feedback.
+
+### Default wiring
+
+- Default data pin: `GPIO25`
+- Default LED type: single `WS2812`
+- Default RGB order: `GRB`
+
+If your breakout uses a different color order, change the YAML substitution for `status_pixel_rgb_order`.
+
+### Home Assistant entities
+
+- `Status Pixel`
+- `Enable Status Pixel Auto`
+
+### Manual test effects
+
+When `Enable Status Pixel Auto` is off, you can use the `Status Pixel` light entity directly in Home Assistant and select one of these named effects from the light's effect dropdown:
+
+- `Test Healthy Green`
+- `Test Motion Blue`
+- `Test Sound Orange`
+- `Test Smoke Red Flash`
+- `Test WiFi Reconnect Amber`
+- `Test API Idle Teal`
+- `Test Sensor Trouble Yellow`
+- `Test Memory Warning Purple`
+- `Test Rainbow`
+- `Status Preview Cycle`
+
+### How it works
+
+- `Enable Status Pixel Auto` on: the firmware drives the pixel automatically from device state.
+- `Enable Status Pixel Auto` off: the pixel stops following automatic patterns, and you can set color manually from the `Status Pixel` light entity in Home Assistant.
+
+### Default color map
+
+- Solid dim green: healthy idle
+- Amber pulse: booting or PIR warmup
+- Cyan/teal blink: Wi-Fi is up but no API client is connected
+- Amber blink: Wi-Fi reconnecting
+- Blue pulse: motion active
+- Orange pulse: sound intrusion active
+- Cyan pulse: quiet calibration capture running
+- Yellow pulse: loud calibration capture running
+- Fast red flash: smoke alarm detected
+- Yellow blink: sensor trouble
+- Purple pulse: memory pressure or fragmentation warning
+
+### Color scheme reference
+
+- `Green`: healthy / stable / normal idle
+- `Amber`: booting, warmup, or reconnecting
+- `Teal/Cyan`: connected to Wi-Fi but waiting on API or doing quiet calibration
+- `Blue`: motion-related state
+- `Orange`: sound-related alert state
+- `Yellow`: warning or fault that is not smoke
+- `Purple`: resource-health warning such as memory pressure
+- `Red`: highest-priority alert, used for smoke detection
+
 ### Example serial commands
 
 ```text
