@@ -1169,6 +1169,55 @@ binary_sensor:
     id: api_connected
     entity_category: diagnostic
 
+  - platform: template
+    name: Environment Sensor Fault
+    id: environment_sensor_fault
+    device_class: problem
+    entity_category: diagnostic
+    lambda: |-
+      if (id(system_uptime_s).state < 60.0f) {
+        return false;
+      }
+      return isnan(id(bme_temperature_f).state) ||
+             isnan(id(bme_humidity).state) ||
+             isnan(id(bme_pressure_hpa).state);
+
+  - platform: template
+    name: PIR Stuck High Fault
+    id: pir_stuck_high_fault
+    device_class: problem
+    entity_category: diagnostic
+    lambda: |-
+      if (id(system_uptime_s).state < 60.0f || !id(pir_enabled)) {
+        return false;
+      }
+      if (!id(pir_raw).state || id(pir_high_since_ms) == 0) {
+        return false;
+      }
+      return (millis() - id(pir_high_since_ms)) > 300000;
+
+  - platform: template
+    name: Smoke Monitor Fault
+    id: smoke_monitor_fault
+    device_class: problem
+    entity_category: diagnostic
+    lambda: |-
+      return id(smoke_alarm_enabled) && !id(sound_enabled);
+
+  - platform: template
+    name: Memory Warning
+    id: memory_warning
+    device_class: problem
+    entity_category: diagnostic
+    lambda: |-
+      if (!isnan(id(heap_free_bytes).state) && id(heap_free_bytes).state < 20000.0f) {
+        return true;
+      }
+      if (!isnan(id(heap_fragmentation_pct).state) && id(heap_fragmentation_pct).state > 50.0f) {
+        return true;
+      }
+      return false;
+
   - platform: gpio
     id: pir_raw
     internal: true
@@ -1236,6 +1285,14 @@ text_sensor:
     entity_category: diagnostic
     update_interval: 15s
     lambda: |-
+      const bool environment_fault = isnan(id(bme_temperature_f).state) ||
+                                     isnan(id(bme_humidity).state) ||
+                                     isnan(id(bme_pressure_hpa).state);
+      const bool pir_fault = id(pir_enabled) && id(pir_raw).state &&
+                             id(pir_high_since_ms) != 0 &&
+                             (millis() - id(pir_high_since_ms)) > 300000;
+      const bool smoke_fault = id(smoke_alarm_enabled) && !id(sound_enabled);
+
       if (id(system_uptime_s).state < 60.0f) {
         return {"Recovering After Boot"};
       }
@@ -1248,15 +1305,14 @@ text_sensor:
         return {"WiFi OK / API Idle"};
       }
 
-      if (isnan(id(bme_temperature_f).state) || isnan(id(bme_humidity).state) || isnan(id(bme_pressure_hpa).state)) {
+      if (environment_fault || pir_fault || smoke_fault) {
         return {"Sensor Trouble"};
       }
 
-      if (!isnan(id(heap_free_bytes).state) && id(heap_free_bytes).state < 20000.0f) {
-        return {"Low Memory"};
-      }
-
-      if (!isnan(id(heap_fragmentation_pct).state) && id(heap_fragmentation_pct).state > 50.0f) {
+      if (id(memory_warning).state) {
+        if (!isnan(id(heap_free_bytes).state) && id(heap_free_bytes).state < 20000.0f) {
+          return {"Low Memory"};
+        }
         return {"Memory Fragmented"};
       }
 

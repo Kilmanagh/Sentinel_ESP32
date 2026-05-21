@@ -74,4 +74,5 @@ See `docs/Adjustments.MD` for operator workflow.
 - `docs/Sentinel_ESP32_Node.md` for firmware build/flash and serial usage
 - `docs/MQTT_Topic_Map.md` for MQTT payloads and config topics
 - `docs/Adjustments.MD` for tuning and beacon enrollment
+- `docs/Sentinel_Home_Assistant_Helpers.md` for HA-side counters, mode helpers, and last-event tracking
 - `docs/Hardware_Deliverables.md` for hardware deliverables

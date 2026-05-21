@@ -1,0 +1,230 @@
+# Example Home Assistant package for Sentinel.
+#
+# Drop this file into your Home Assistant packages folder, for example:
+#   config/packages/sentinel_helpers_package.yaml
+#
+# Then make sure your main configuration.yaml includes:
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# This package intentionally keeps the higher-churn helper logic in HA instead
+# of on the ESP32:
+# - event counters
+# - a shared last-event readout
+# - a simple operating mode selector
+#
+# Update the entity_ids below if your Sentinel device uses different names.
+
+counter:
+  sentinel_motion_events:
+    name: Sentinel Motion Events
+    icon: mdi:run-fast
+    step: 1
+
+  sentinel_sound_events:
+    name: Sentinel Sound Events
+    icon: mdi:waveform
+    step: 1
+
+  sentinel_smoke_events:
+    name: Sentinel Smoke Events
+    icon: mdi:smoke-detector-alert
+    step: 1
+
+  sentinel_door_events:
+    name: Sentinel Door Events
+    icon: mdi:door-open
+    step: 1
+
+input_text:
+  sentinel_last_event:
+    name: Sentinel Last Event
+    max: 255
+
+input_datetime:
+  sentinel_last_event_time:
+    name: Sentinel Last Event Time
+    has_date: true
+    has_time: true
+
+input_select:
+  sentinel_mode:
+    name: Sentinel Mode
+    icon: mdi:shield-home
+    options:
+      - Disarmed
+      - Motion Only
+      - Motion + Sound
+      - Full Monitor
+
+template:
+  - sensor:
+      - name: Sentinel Last Event Summary
+        unique_id: sentinel_last_event_summary
+        icon: mdi:history
+        state: >-
+          {% set event_name = states('input_text.sentinel_last_event') %}
+          {% set event_time = states('input_datetime.sentinel_last_event_time') %}
+          {% if event_name in ['unknown', 'unavailable', ''] %}
+            Idle
+          {% elif event_time in ['unknown', 'unavailable', ''] %}
+            {{ event_name }}
+          {% else %}
+            {{ event_name }} @ {{ event_time }}
+          {% endif %}
+
+automation:
+  # Count motion triggers and record the latest event.
+  - id: sentinel_count_motion_events
+    alias: Sentinel Count Motion Events
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.sentinel_motion
+        to: "on"
+    action:
+      - service: counter.increment
+        target:
+          entity_id: counter.sentinel_motion_events
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.sentinel_last_event
+        data:
+          value: Motion
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.sentinel_last_event_time
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  # Count sound intrusion triggers and record the latest event.
+  - id: sentinel_count_sound_events
+    alias: Sentinel Count Sound Events
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.sentinel_sound_intrusion
+        to: "on"
+    action:
+      - service: counter.increment
+        target:
+          entity_id: counter.sentinel_sound_events
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.sentinel_last_event
+        data:
+          value: Sound intrusion
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.sentinel_last_event_time
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  # Count smoke events and record the latest event.
+  - id: sentinel_count_smoke_events
+    alias: Sentinel Count Smoke Events
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.sentinel_smoke_alarm_detected
+        to: "on"
+    action:
+      - service: counter.increment
+        target:
+          entity_id: counter.sentinel_smoke_events
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.sentinel_last_event
+        data:
+          value: Smoke alarm
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.sentinel_last_event_time
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  # Count door openings and record the latest event.
+  - id: sentinel_count_door_events
+    alias: Sentinel Count Door Events
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.sentinel_door
+        to: "on"
+    action:
+      - service: counter.increment
+        target:
+          entity_id: counter.sentinel_door_events
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.sentinel_last_event
+        data:
+          value: Door opened
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.sentinel_last_event_time
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  # Apply a simple HA-owned mode to the existing ESPHome sensing switches.
+  #
+  # Mode mapping:
+  # - Disarmed: all optional sensing off
+  # - Motion Only: PIR on, sound off, smoke off
+  # - Motion + Sound: PIR on, sound on, smoke off
+  # - Full Monitor: PIR on, sound on, smoke on
+  - id: sentinel_apply_mode_selection
+    alias: Sentinel Apply Mode Selection
+    mode: restart
+    trigger:
+      - platform: state
+        entity_id: input_select.sentinel_mode
+    action:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_select.sentinel_mode
+                state: Disarmed
+            sequence:
+              - service: switch.turn_off
+                target:
+                  entity_id:
+                    - switch.sentinel_enable_pir_sensing
+                    - switch.sentinel_enable_sound_sensing
+                    - switch.sentinel_enable_smoke_alarm_sensing
+
+          - conditions:
+              - condition: state
+                entity_id: input_select.sentinel_mode
+                state: Motion Only
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id: switch.sentinel_enable_pir_sensing
+              - service: switch.turn_off
+                target:
+                  entity_id:
+                    - switch.sentinel_enable_sound_sensing
+                    - switch.sentinel_enable_smoke_alarm_sensing
+
+          - conditions:
+              - condition: state
+                entity_id: input_select.sentinel_mode
+                state: Motion + Sound
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id:
+                    - switch.sentinel_enable_pir_sensing
+                    - switch.sentinel_enable_sound_sensing
+              - service: switch.turn_off
+                target:
+                  entity_id: switch.sentinel_enable_smoke_alarm_sensing
+
+          - conditions:
+              - condition: state
+                entity_id: input_select.sentinel_mode
+                state: Full Monitor
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id:
+                    - switch.sentinel_enable_pir_sensing
+                    - switch.sentinel_enable_sound_sensing
+                    - switch.sentinel_enable_smoke_alarm_sensing
