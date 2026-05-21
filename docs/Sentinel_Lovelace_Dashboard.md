@@ -12,8 +12,8 @@ Files:
 The dashboard is split into three views so the device is easier to use day-to-day:
 
 - `Overview` - live status, environment, sound, and smoke alarm readouts
-- `Settings` - tuning values, sensing toggles, calibration actions, and restart/reset controls
-- `Troubleshooting` - high-signal debug readouts plus recovery actions
+- `Settings` - tuning values, sensing toggles, LED controls, calibration actions, and restart/reset controls
+- `Troubleshooting` - high-signal debug readouts, LED checks, and recovery actions
 
 ## Why this layout works
 
@@ -60,6 +60,7 @@ Focus on:
 - `Motion`, `Door`, `Sound Intrusion`, `Smoke Alarm`
 - `Temperature`, `Humidity`, `Pressure`, `Comfort Index`, `IAQ Score`
 - `Sound Level %`, `Sound Approx dB`, `Smoke Alarm Tone Score`
+- `Device Health`, `Status LEDs`, `Enable Status LEDs Auto`
 
 ### Settings view
 
@@ -96,12 +97,19 @@ Smoke alarm tuning:
 - `Smoke Alarm Confirm Beeps`
 - `Smoke Alarm Hold`
 
+Status LED controls:
+
+- `Enable Status LEDs Auto`
+- `Status LEDs`
+- the current `effect` attribute when you are testing patterns manually
+
 ### Troubleshooting view
 
 Use this when a sensor seems wrong.
 
 Helpful readouts:
 
+- `Device Health`
 - `Sound Peak ADC`
 - `Sound Level %`
 - `Sound Approx dB`
@@ -110,6 +118,12 @@ Helpful readouts:
 - `Smoke Alarm Last Beep Age`
 - `Sound Calibration Status`
 - `Sound Calibration Captured Peak`
+
+Helpful LED checks:
+
+- `Status LEDs`
+- `Enable Status LEDs Auto`
+- the active LED `effect` attribute
 
 Helpful actions:
 
@@ -179,6 +193,13 @@ Important distinction:
 ### A detector seems stuck
 
 Use `Reset Detection State` first. That clears live detection state without wiping your saved settings.
+
+### The status LEDs are dark or the colors look wrong
+
+- Confirm the LEDs are powered from `5V` and share `GND` with the ESP32
+- Confirm the data chain order is `LED 1 -> LED 2 -> LED 3`
+- If colors are swapped, adjust `status_pixel_rgb_order` in the ESPHome YAML
+- Turn off `Enable Status LEDs Auto` and run `Full Status Preview` from the `Status LEDs` entity
 
 ## Notes
 

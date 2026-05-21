@@ -123,6 +123,17 @@ views:
           - entity: sensor.sentinel_pressure
             name: Pressure
 
+      - type: entities
+        title: Status LEDs and Health
+        show_header_toggle: false
+        entities:
+          - entity: text_sensor.sentinel_device_health
+            name: Device Health
+          - entity: light.sentinel_status_leds
+            name: Status LEDs
+          - entity: switch.sentinel_enable_status_leds_auto
+            name: Enable Status LEDs Auto
+
       - type: grid
         title: Sound and Alarm Readouts
         columns: 3
@@ -265,6 +276,19 @@ views:
           - entity: sensor.sentinel_smoke_alarm_last_beep_age
             name: Smoke Alarm Last Beep Age
 
+      - type: entities
+        title: Status LED Controls
+        show_header_toggle: false
+        entities:
+          - entity: switch.sentinel_enable_status_leds_auto
+            name: Enable Status LEDs Auto
+          - entity: light.sentinel_status_leds
+            name: Status LEDs
+          - type: attribute
+            entity: light.sentinel_status_leds
+            attribute: effect
+            name: Active LED Effect
+
       - type: horizontal-stack
         cards:
           - type: button
@@ -311,10 +335,19 @@ views:
           - Lower `Smoke Alarm Min Peak ADC`
           - Watch `Smoke Alarm Tone Score`, `Smoke Alarm Beep Count`, and `Smoke Alarm Last Beep Age`
 
+          ## If the status LEDs do not look right
+
+          - Confirm the chain is `LED 1 -> LED 2 -> LED 3`
+          - If colors are wrong, change `status_pixel_rgb_order`
+          - Turn off `Enable Status LEDs Auto` and run `Full Status Preview`
+          - If all LEDs stay dark, check `5V`, shared `GND`, and the `GPIO25` data line
+
       - type: entities
         title: Troubleshooting Readouts
         show_header_toggle: false
         entities:
+          - entity: text_sensor.sentinel_device_health
+            name: Device Health
           - entity: sensor.sentinel_sound_peak_adc
             name: Sound Peak ADC
           - entity: sensor.sentinel_sound_level
@@ -331,6 +364,19 @@ views:
             name: Sound Calibration Status
           - entity: sensor.sentinel_sound_calibration_captured_peak
             name: Sound Calibration Captured Peak
+
+      - type: entities
+        title: Status LED Troubleshooting
+        show_header_toggle: false
+        entities:
+          - entity: switch.sentinel_enable_status_leds_auto
+            name: Enable Status LEDs Auto
+          - entity: light.sentinel_status_leds
+            name: Status LEDs
+          - type: attribute
+            entity: light.sentinel_status_leds
+            attribute: effect
+            name: Active LED Effect
 
       - type: entities
         title: Recovery Actions

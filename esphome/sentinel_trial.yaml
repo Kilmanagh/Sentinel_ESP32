@@ -36,6 +36,14 @@ esphome:
       - binary_sensor.template.publish:
           id: api_connected
           state: false
+      - if:
+          condition:
+            lambda: 'return id(status_pixel_auto_enabled);'
+          then:
+            - light.turn_on:
+                id: status_pixel
+                brightness: 100%
+                effect: Auto Status Layout
 
 esp32:
   board: esp32dev
@@ -125,10 +133,6 @@ globals:
     type: bool
     restore_value: yes
     initial_value: 'true'
-  - id: status_pixel_step
-    type: int
-    restore_value: no
-    initial_value: '0'
   - id: wifi_connected_state
     type: bool
     restore_value: no
@@ -569,91 +573,247 @@ select:
 
 switch:
   - platform: template
-    name: Enable Status Pixel Auto
+    name: Enable Status LEDs Auto
     id: status_pixel_auto_switch
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     turn_on_action:
       - lambda: |-
           id(status_pixel_auto_enabled) = true;
+      - light.turn_on:
+          id: status_pixel
+          brightness: 100%
+          effect: Auto Status Layout
     turn_off_action:
       - lambda: |-
           id(status_pixel_auto_enabled) = false;
+      - light.turn_off: status_pixel
 
   - platform: template
-    name: Enable PIR Sensing
+    name: Status LEDs
     id: pir_enable_switch
     optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
+    num_leds: 3
     turn_on_action:
       - lambda: |-
           id(pir_enabled) = true;
           id(pir_warmup_until_ms) = millis() + (uint32_t) id(pir_warmup_ms).state;
     turn_off_action:
       - lambda: |-
-          id(pir_enabled) = false;
-          id(pir_motion_state) = false;
-          id(pir_high_since_ms) = 0;
-          id(pir_low_since_ms) = 0;
-          id(pir_hold_until_ms) = 0;
-          id(pir_motion).publish_state(false);
+      - addressable_lambda:
+          name: Auto Status Layout
+          update_interval: 250ms
+          lambda: |-
+            static uint32_t step = 0;
+            if (initial_run) {
+              step = 0;
+              it.all() = Color::BLACK;
+            }
 
-  - platform: template
-    name: Enable Sound Sensing
-    id: sound_enable_switch
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-    turn_on_action:
-      - lambda: |-
-          id(sound_enabled) = true;
-          id(sound_window_start_ms) = 0;
-    turn_off_action:
-      - lambda: |-
-          id(sound_enabled) = false;
-          id(sound_intrusion_state) = false;
-          id(sound_calibration_mode) = 0;
-          id(sound_calibration_until_ms) = 0;
-          id(sound_calibration_peak) = 0;
-          id(sound_window_start_ms) = 0;
-          id(sound_hold_until_ms) = 0;
-          id(sound_peak_to_peak_adc_raw) = 0;
-          id(sound_intrusion).publish_state(false);
-          id(sound_peak_adc).publish_state(0);
-          id(sound_min_adc).publish_state(0);
-          id(sound_max_adc).publish_state(0);
-          id(smoke_alarm_state) = false;
-          id(smoke_alarm_tone_active) = false;
-          id(smoke_alarm_last_beep_ms) = 0;
-          id(smoke_alarm_hold_until_ms) = 0;
-          id(smoke_alarm_beep_count) = 0;
-          id(smoke_alarm_detected).publish_state(false);
-          id(smoke_alarm_tone_score).publish_state(0);
+            step += 1;
+            const uint32_t now = millis();
+            const bool booting = now < id(pir_warmup_until_ms) || id(system_uptime_s).state < 60.0f;
+            const bool low_memory = id(device_health).state == "Low Memory" || id(device_health).state == "Memory Fragmented";
+            const bool sensor_trouble = id(device_health).state == "Sensor Trouble";
 
-  - platform: template
-    name: Enable Smoke Alarm Sensing
-    id: smoke_alarm_enable_switch
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-    turn_on_action:
-      - lambda: |-
-          id(smoke_alarm_enabled) = true;
-          id(smoke_alarm_state) = false;
-          id(smoke_alarm_tone_active) = false;
-          id(smoke_alarm_last_beep_ms) = 0;
-          id(smoke_alarm_hold_until_ms) = 0;
-          id(smoke_alarm_beep_count) = 0;
-          id(smoke_alarm_detected).publish_state(false);
-          id(smoke_alarm_tone_score).publish_state(0);
-    turn_off_action:
-      - lambda: |-
-          id(smoke_alarm_enabled) = false;
-          id(smoke_alarm_state) = false;
-          id(smoke_alarm_tone_active) = false;
-          id(smoke_alarm_last_beep_ms) = 0;
-          id(smoke_alarm_hold_until_ms) = 0;
-          id(smoke_alarm_beep_count) = 0;
-          id(smoke_alarm_detected).publish_state(false);
-          id(smoke_alarm_tone_score).publish_state(0);
+            auto set_led = [&](int index, float red, float green, float blue, float brightness) {
+              const float scaled_red = red * brightness;
+              const float scaled_green = green * brightness;
+              const float scaled_blue = blue * brightness;
+              it[index] = Color(
+                (uint8_t) (scaled_red * 255.0f),
+                (uint8_t) (scaled_green * 255.0f),
+                (uint8_t) (scaled_blue * 255.0f)
+              );
+            };
+
+            it.all() = Color::BLACK;
+
+            if (!id(node_status).state) {
+              if ((step % 2) == 0) {
+                set_led(0, 1.0f, 0.2f, 0.0f, 0.30f);
+              }
+            } else if (!id(wifi_connected_state)) {
+              if ((step % 4) < 2) {
+                set_led(0, 1.0f, 0.55f, 0.0f, 0.22f);
+              }
+            } else if (booting) {
+              set_led(0, 1.0f, 0.7f, 0.15f, (step % 4) < 2 ? 0.18f : 0.05f);
+            } else if (low_memory) {
+              set_led(0, 1.0f, 0.0f, 1.0f, (step % 2) == 0 ? 0.18f : 0.04f);
+            } else if (id(api_client_count) <= 0) {
+              set_led(0, 0.0f, 0.7f, 0.7f, (step % 4) == 0 ? 0.18f : 0.03f);
+            } else {
+              set_led(0, 0.0f, 1.0f, 0.0f, 0.07f);
+            }
+
+            if (id(sound_calibration_mode) == 1) {
+              set_led(1, 0.0f, 0.85f, 0.85f, (step % 2) == 0 ? 0.30f : 0.08f);
+            } else if (id(sound_calibration_mode) == 2) {
+              set_led(1, 1.0f, 0.85f, 0.0f, (step % 2) == 0 ? 0.35f : 0.08f);
+            } else if (id(sound_intrusion_state) || id(sound_intrusion).state) {
+              set_led(1, 1.0f, 0.35f, 0.0f, (step % 2) == 0 ? 0.35f : 0.10f);
+            } else if (id(pir_motion_state) || id(pir_motion).state) {
+              set_led(1, 0.0f, 0.0f, 1.0f, (step % 2) == 0 ? 0.25f : 0.08f);
+            }
+
+            if (id(smoke_alarm_state) || id(smoke_alarm_detected).state) {
+              if ((step % 2) == 0) {
+                set_led(2, 1.0f, 0.0f, 0.0f, 0.65f);
+              }
+            } else if (sensor_trouble) {
+              if ((step % 2) == 0) {
+                set_led(2, 1.0f, 1.0f, 0.0f, 0.18f);
+              } else {
+                set_led(2, 1.0f, 1.0f, 0.0f, 0.03f);
+              }
+            }
+      - addressable_lambda:
+          name: Test System Healthy
+          update_interval: 800ms
+          lambda: |-
+            it.all() = Color::BLACK;
+            it[0] = Color(0, 18, 0);
+      - addressable_lambda:
+          name: Test Network Reconnect
+          update_interval: 300ms
+          lambda: |-
+            static bool on = false;
+            if (initial_run) {
+              on = false;
+            }
+            on = !on;
+            it.all() = Color::BLACK;
+            if (on) {
+              it[0] = Color(56, 31, 0);
+            }
+      - addressable_lambda:
+          name: Test API Idle
+          update_interval: 700ms
+          lambda: |-
+            static bool bright = false;
+            if (initial_run) {
+              bright = false;
+            }
+            bright = !bright;
+            it.all() = Color::BLACK;
+            it[0] = bright ? Color(0, 46, 46) : Color(0, 8, 8);
+      - addressable_lambda:
+          name: Test Motion
+          update_interval: 600ms
+          lambda: |-
+            static bool bright = false;
+            if (initial_run) {
+              bright = false;
+            }
+            bright = !bright;
+            it.all() = Color::BLACK;
+            it[1] = bright ? Color(0, 0, 64) : Color(0, 0, 20);
+      - addressable_lambda:
+          name: Test Sound
+          update_interval: 500ms
+          lambda: |-
+            static bool bright = false;
+            if (initial_run) {
+              bright = false;
+            }
+            bright = !bright;
+            it.all() = Color::BLACK;
+            it[1] = bright ? Color(90, 31, 0) : Color(26, 8, 0);
+      - addressable_lambda:
+          name: Test Quiet Calibration
+          update_interval: 600ms
+          lambda: |-
+            static bool bright = false;
+            if (initial_run) {
+              bright = false;
+            }
+            bright = !bright;
+            it.all() = Color::BLACK;
+            it[1] = bright ? Color(0, 77, 77) : Color(0, 20, 20);
+      - addressable_lambda:
+          name: Test Loud Calibration
+          update_interval: 600ms
+          lambda: |-
+            static bool bright = false;
+            if (initial_run) {
+              bright = false;
+            }
+            bright = !bright;
+            it.all() = Color::BLACK;
+            it[1] = bright ? Color(90, 77, 0) : Color(26, 20, 0);
+      - addressable_lambda:
+          name: Test Smoke Alert
+          update_interval: 220ms
+          lambda: |-
+            static bool on = false;
+            if (initial_run) {
+              on = false;
+            }
+            on = !on;
+            it.all() = Color::BLACK;
+            if (on) {
+              it[2] = Color(166, 0, 0);
+            }
+      - addressable_lambda:
+          name: Test Sensor Fault
+          update_interval: 250ms
+          lambda: |-
+            static bool bright = false;
+            if (initial_run) {
+              bright = false;
+            }
+            bright = !bright;
+            it.all() = Color::BLACK;
+            it[2] = bright ? Color(46, 46, 0) : Color(8, 8, 0);
+      - addressable_lambda:
+          name: Test Memory Warning
+          update_interval: 700ms
+          lambda: |-
+            static bool bright = false;
+            if (initial_run) {
+              bright = false;
+            }
+            bright = !bright;
+            it.all() = Color::BLACK;
+            it[0] = bright ? Color(46, 0, 46) : Color(8, 0, 8);
+
+      - addressable_rainbow:
+          name: Test Rainbow
+          speed: 8
+          width: 40
+
+      - addressable_lambda:
+          name: Full Status Preview
+          update_interval: 900ms
+          lambda: |-
+            static int state = 0;
+            if (initial_run) {
+              state = 0;
+            }
+            it.all() = Color::BLACK;
+            if (state == 0) {
+              it[0] = Color(0, 18, 0);
+            } else if (state == 1) {
+              it[0] = Color(56, 31, 0);
+            } else if (state == 2) {
+              it[0] = Color(0, 46, 46);
+            } else if (state == 3) {
+              it[1] = Color(0, 0, 64);
+            } else if (state == 4) {
+              it[1] = Color(90, 31, 0);
+            } else if (state == 5) {
+              it[1] = Color(0, 77, 77);
+            } else if (state == 6) {
+              it[1] = Color(90, 77, 0);
+            } else if (state == 7) {
+              it[2] = Color(166, 0, 0);
+            } else if (state == 8) {
+              it[2] = Color(46, 46, 0);
+            } else {
+              it[0] = Color(46, 0, 46);
+            }
+            state = (state + 1) % 10;
 
 sensor:
   - platform: bme280_i2c
@@ -924,113 +1084,6 @@ sensor:
       }
       return (float) (millis() - id(smoke_alarm_last_beep_ms));
 
-light:
-  - platform: esp32_rmt_led_strip
-    name: Status Pixel
-    id: status_pixel
-    pin: ${status_pixel_pin}
-    num_leds: 1
-    chipset: WS2812
-    rgb_order: ${status_pixel_rgb_order}
-    default_transition_length: 0s
-    restore_mode: ALWAYS_OFF
-    entity_category: diagnostic
-    effects:
-      - pulse:
-          name: Test Healthy Green
-          transition_length: 300ms
-          update_interval: 700ms
-          min_brightness: 8%
-          max_brightness: 30%
-      - pulse:
-          name: Test Motion Blue
-          transition_length: 250ms
-          update_interval: 600ms
-          min_brightness: 8%
-          max_brightness: 35%
-      - pulse:
-          name: Test Sound Orange
-          transition_length: 250ms
-          update_interval: 500ms
-          min_brightness: 8%
-          max_brightness: 40%
-      - strobe:
-          name: Test Smoke Red Flash
-          colors:
-            - state: true
-              brightness: 65%
-              red: 100%
-              green: 0%
-              blue: 0%
-              duration: 220ms
-            - state: false
-              duration: 180ms
-      - strobe:
-          name: Test WiFi Reconnect Amber
-          colors:
-            - state: true
-              brightness: 24%
-              red: 100%
-              green: 55%
-              blue: 0%
-              duration: 300ms
-            - state: false
-              duration: 300ms
-      - pulse:
-          name: Test API Idle Teal
-          transition_length: 400ms
-          update_interval: 1000ms
-          min_brightness: 3%
-          max_brightness: 20%
-      - strobe:
-          name: Test Sensor Trouble Yellow
-          colors:
-            - state: true
-              brightness: 20%
-              red: 100%
-              green: 100%
-              blue: 0%
-              duration: 250ms
-            - state: false
-              duration: 250ms
-      - pulse:
-          name: Test Memory Warning Purple
-          transition_length: 350ms
-          update_interval: 800ms
-          min_brightness: 4%
-          max_brightness: 22%
-      - addressable_rainbow:
-          name: Test Rainbow
-          speed: 8
-          width: 40
-      - lambda:
-          name: Status Preview Cycle
-          update_interval: 900ms
-          lambda: |-
-            static int state = 0;
-            auto call = id(status_pixel).turn_on();
-            call.set_transition_length(150);
-            call.set_brightness(0.25f);
-            if (state == 0) {
-              call.set_rgb(0.0f, 1.0f, 0.0f);
-            } else if (state == 1) {
-              call.set_rgb(1.0f, 0.7f, 0.15f);
-            } else if (state == 2) {
-              call.set_rgb(0.0f, 1.0f, 1.0f);
-            } else if (state == 3) {
-              call.set_rgb(0.0f, 0.0f, 1.0f);
-            } else if (state == 4) {
-              call.set_rgb(1.0f, 0.35f, 0.0f);
-            } else if (state == 5) {
-              call.set_rgb(1.0f, 1.0f, 0.0f);
-            } else if (state == 6) {
-              call.set_rgb(1.0f, 0.0f, 1.0f);
-            } else {
-              call.set_rgb(1.0f, 0.0f, 0.0f);
-            }
-            call.perform();
-            state = (state + 1) % 8;
-
 binary_sensor:
   - platform: template
     name: WiFi Connected
@@ -1258,82 +1311,6 @@ interval:
               id(pir_motion).publish_state(false);
             }
           }
-
-  - interval: 250ms
-    then:
-      - lambda: |-
-          id(status_pixel_step) += 1;
-
-          if (!id(status_pixel_auto_enabled)) {
-            return;
-          }
-
-          const uint32_t now = millis();
-          float red = 0.0f;
-          float green = 0.0f;
-          float blue = 0.0f;
-          float brightness = 0.08f;
-          bool light_on = true;
-
-          if (id(smoke_alarm_state) || id(smoke_alarm_detected).state) {
-            red = 1.0f;
-            brightness = 0.65f;
-            light_on = (id(status_pixel_step) % 2) == 0;
-          } else if (id(sound_intrusion_state) || id(sound_intrusion).state) {
-            red = 1.0f;
-            green = 0.35f;
-            brightness = (id(status_pixel_step) % 2) == 0 ? 0.35f : 0.10f;
-          } else if (id(sound_calibration_mode) == 1) {
-            green = 0.85f;
-            blue = 0.85f;
-            brightness = (id(status_pixel_step) % 2) == 0 ? 0.30f : 0.08f;
-          } else if (id(sound_calibration_mode) == 2) {
-            red = 1.0f;
-            green = 0.85f;
-            brightness = (id(status_pixel_step) % 2) == 0 ? 0.35f : 0.08f;
-          } else if (id(pir_motion_state) || id(pir_motion).state) {
-            blue = 1.0f;
-            brightness = (id(status_pixel_step) % 2) == 0 ? 0.25f : 0.08f;
-          } else if (id(node_status).state == false) {
-            red = 1.0f;
-            green = 0.2f;
-            brightness = (id(status_pixel_step) % 2) == 0 ? 0.30f : 0.0f;
-          } else if (!id(wifi_connected_state)) {
-            red = 1.0f;
-            green = 0.55f;
-            brightness = (id(status_pixel_step) % 4) < 2 ? 0.22f : 0.0f;
-          } else if (id(api_client_count) <= 0) {
-            green = 0.7f;
-            blue = 0.7f;
-            brightness = (id(status_pixel_step) % 4) == 0 ? 0.18f : 0.03f;
-          } else if (now < id(pir_warmup_until_ms) || id(system_uptime_s).state < 60.0f) {
-            red = 1.0f;
-            green = 0.7f;
-            blue = 0.15f;
-            brightness = (id(status_pixel_step) % 4) < 2 ? 0.18f : 0.05f;
-          } else if (id(device_health).state == "Low Memory" || id(device_health).state == "Memory Fragmented") {
-            red = 1.0f;
-            green = 0.0f;
-            blue = 1.0f;
-            brightness = (id(status_pixel_step) % 2) == 0 ? 0.18f : 0.04f;
-          } else if (id(device_health).state == "Sensor Trouble") {
-            red = 1.0f;
-            green = 1.0f;
-            brightness = (id(status_pixel_step) % 2) == 0 ? 0.18f : 0.03f;
-          } else {
-            green = 1.0f;
-            brightness = 0.07f;
-          }
-
-          auto call = id(status_pixel).make_call();
-          if (!light_on || brightness <= 0.0f) {
-            call.set_state(false);
-          } else {
-            call.set_state(true);
-            call.set_brightness(brightness);
-            call.set_rgb(red, green, blue);
-          }
-          call.perform();
 
   - interval: 10ms
     then:

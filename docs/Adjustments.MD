@@ -589,56 +589,82 @@ The ESPHome build now also exposes node-health diagnostics so you can tell wheth
 - If it shows `Sensor Trouble`, check whether the BME280 values are unavailable or wiring is intermittent.
 - If it shows `Low Memory` or `Memory Fragmented`, treat that as a firmware stability warning and avoid adding more heavy features until the memory picture is understood.
 
-## Status Pixel
+## Status LEDs
 
-The ESPHome build can now drive a single WS2812 status pixel for visual state feedback.
+The ESPHome build can now drive three chained WS2812 status LEDs so the node can show system health, live activity, and urgent alerts at the same time.
 
 ### Default wiring
 
 - Default data pin: `GPIO25`
-- Default LED type: single `WS2812`
+- Default LED type: `3 x WS2812`
 - Default RGB order: `GRB`
+- Wiring chain: `GPIO25 -> DIN LED 1 -> DOUT LED 1 -> DIN LED 2 -> DOUT LED 2 -> DIN LED 3`
+- Power: `5V` and `GND` to the LED chain, with ESP32 ground shared
+
+Recommended hardware:
+
+- Add a `330-470 ohm` resistor in series with the data line near LED 1
+- Add a `470-1000 uF` capacitor across LED `5V` and `GND` near the LED chain
 
 If your breakout uses a different color order, change the YAML substitution for `status_pixel_rgb_order`.
 
 ### Home Assistant entities
 
-- `Status Pixel`
-- `Enable Status Pixel Auto`
+- `Status LEDs`
+- `Enable Status LEDs Auto`
+
+### LED roles
+
+- `LED 1` left: system, network, and overall health
+- `LED 2` center: live sensing activity
+- `LED 3` right: urgent alerts and sensor faults
 
 ### Manual test effects
 
-When `Enable Status Pixel Auto` is off, you can use the `Status Pixel` light entity directly in Home Assistant and select one of these named effects from the light's effect dropdown:
+When `Enable Status LEDs Auto` is off, you can use the `Status LEDs` light entity directly in Home Assistant and select one of these named effects from the light's effect dropdown:
 
-- `Test Healthy Green`
-- `Test Motion Blue`
-- `Test Sound Orange`
-- `Test Smoke Red Flash`
-- `Test WiFi Reconnect Amber`
-- `Test API Idle Teal`
-- `Test Sensor Trouble Yellow`
-- `Test Memory Warning Purple`
+- `Test System Healthy`
+- `Test Network Reconnect`
+- `Test API Idle`
+- `Test Motion`
+- `Test Sound`
+- `Test Quiet Calibration`
+- `Test Loud Calibration`
+- `Test Smoke Alert`
+- `Test Sensor Fault`
+- `Test Memory Warning`
 - `Test Rainbow`
-- `Status Preview Cycle`
+- `Full Status Preview`
 
 ### How it works
 
-- `Enable Status Pixel Auto` on: the firmware drives the pixel automatically from device state.
-- `Enable Status Pixel Auto` off: the pixel stops following automatic patterns, and you can set color manually from the `Status Pixel` light entity in Home Assistant.
+- `Enable Status LEDs Auto` on: the firmware runs the `Auto Status Layout` effect and assigns each LED a fixed role.
+- `Enable Status LEDs Auto` off: the automatic layout stops and the `Status LEDs` entity is available for manual color/effect testing.
 
 ### Default color map
 
-- Solid dim green: healthy idle
+`LED 1` system / network / health:
+
+- Dim green: healthy idle
 - Amber pulse: booting or PIR warmup
-- Cyan/teal blink: Wi-Fi is up but no API client is connected
+- Teal blink: Wi-Fi is up but no API client is connected
 - Amber blink: Wi-Fi reconnecting
+- Purple pulse: memory pressure or fragmentation warning
+- Red blink: node status failure
+
+`LED 2` live activity:
+
+- Off: idle
 - Blue pulse: motion active
 - Orange pulse: sound intrusion active
 - Cyan pulse: quiet calibration capture running
 - Yellow pulse: loud calibration capture running
+
+`LED 3` alerts:
+
+- Off: no active alert
 - Fast red flash: smoke alarm detected
 - Yellow blink: sensor trouble
-- Purple pulse: memory pressure or fragmentation warning
 
 ### Color scheme reference
 
