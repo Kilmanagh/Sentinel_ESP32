@@ -414,6 +414,87 @@ number:
     step: 1
     mode: box
 
+  - platform: template
+    name: Smoke Alarm Custom Tone 1
+    id: smoke_alarm_custom_tone_1_hz
+    unit_of_measurement: Hz
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 3000
+    min_value: 1000
+    max_value: 5000
+    step: 50
+    mode: box
+
+  - platform: template
+    name: Smoke Alarm Custom Tone 2
+    id: smoke_alarm_custom_tone_2_hz
+    unit_of_measurement: Hz
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 3200
+    min_value: 1000
+    max_value: 5000
+    step: 50
+    mode: box
+
+  - platform: template
+    name: Smoke Alarm Custom Tone 3
+    id: smoke_alarm_custom_tone_3_hz
+    unit_of_measurement: Hz
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 3400
+    min_value: 1000
+    max_value: 5000
+    step: 50
+    mode: box
+
+  - platform: template
+    name: Smoke Alarm Custom Min Beep Gap
+    id: smoke_alarm_custom_min_beep_gap_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 250
+    min_value: 100
+    max_value: 120000
+    step: 50
+    mode: box
+
+  - platform: template
+    name: Smoke Alarm Custom Max Beep Gap
+    id: smoke_alarm_custom_max_beep_gap_ms
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: 2000
+    min_value: 200
+    max_value: 120000
+    step: 100
+    mode: box
+
+select:
+  - platform: template
+    name: Smoke Alarm Profile
+    id: smoke_alarm_profile
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: Default
+    options:
+      - Default
+      - Generic Smoke
+      - Strict T3 Smoke
+      - Strict T4 CO
+      - Low Battery Chirp
+      - Custom
+
 switch:
   - platform: template
     name: Enable PIR Sensing
@@ -964,9 +1045,66 @@ interval:
             constexpr int smoke_sample_count = 64;
             constexpr int smoke_sample_interval_us = 125;
             constexpr float smoke_sample_rate_hz = 8000.0f;
-            constexpr uint32_t smoke_min_beep_gap_ms = 250;
-            constexpr uint32_t smoke_max_beep_gap_ms = 2000;
-            const float smoke_target_freqs[] = {3000.0f, 3200.0f, 3400.0f};
+
+            const std::string smoke_profile = id(smoke_alarm_profile).state;
+            float smoke_target_freqs[3] = {3000.0f, 3200.0f, 3400.0f};
+            float smoke_tone_threshold = id(smoke_alarm_tone_threshold_pct).state;
+            int smoke_min_peak = (int) id(smoke_alarm_min_peak_adc).state;
+            uint32_t smoke_confirm_beeps = (uint32_t) id(smoke_alarm_confirm_beeps).state;
+            uint32_t smoke_hold_ms = (uint32_t) id(smoke_alarm_hold_ms_config).state;
+            uint32_t smoke_min_beep_gap_ms = 250;
+            uint32_t smoke_max_beep_gap_ms = 2000;
+
+            if (smoke_profile == "Generic Smoke") {
+              smoke_target_freqs[0] = 2800.0f;
+              smoke_target_freqs[1] = 3100.0f;
+              smoke_target_freqs[2] = 3400.0f;
+              smoke_tone_threshold = 16.0f;
+              smoke_min_peak = 220;
+              smoke_confirm_beeps = 3;
+              smoke_hold_ms = 15000;
+              smoke_min_beep_gap_ms = 250;
+              smoke_max_beep_gap_ms = 1800;
+            } else if (smoke_profile == "Strict T3 Smoke") {
+              smoke_target_freqs[0] = 3000.0f;
+              smoke_target_freqs[1] = 3200.0f;
+              smoke_target_freqs[2] = 3400.0f;
+              smoke_tone_threshold = 18.0f;
+              smoke_min_peak = 250;
+              smoke_confirm_beeps = 3;
+              smoke_hold_ms = 15000;
+              smoke_min_beep_gap_ms = 700;
+              smoke_max_beep_gap_ms = 2200;
+            } else if (smoke_profile == "Strict T4 CO") {
+              smoke_target_freqs[0] = 2600.0f;
+              smoke_target_freqs[1] = 2900.0f;
+              smoke_target_freqs[2] = 3200.0f;
+              smoke_tone_threshold = 20.0f;
+              smoke_min_peak = 260;
+              smoke_confirm_beeps = 4;
+              smoke_hold_ms = 15000;
+              smoke_min_beep_gap_ms = 350;
+              smoke_max_beep_gap_ms = 1500;
+            } else if (smoke_profile == "Low Battery Chirp") {
+              smoke_target_freqs[0] = 3000.0f;
+              smoke_target_freqs[1] = 3200.0f;
+              smoke_target_freqs[2] = 3400.0f;
+              smoke_tone_threshold = 22.0f;
+              smoke_min_peak = 180;
+              smoke_confirm_beeps = 1;
+              smoke_hold_ms = 6000;
+              smoke_min_beep_gap_ms = 10000;
+              smoke_max_beep_gap_ms = 90000;
+            } else if (smoke_profile == "Custom") {
+              smoke_target_freqs[0] = id(smoke_alarm_custom_tone_1_hz).state;
+              smoke_target_freqs[1] = id(smoke_alarm_custom_tone_2_hz).state;
+              smoke_target_freqs[2] = id(smoke_alarm_custom_tone_3_hz).state;
+              smoke_min_beep_gap_ms = (uint32_t) id(smoke_alarm_custom_min_beep_gap_ms).state;
+              smoke_max_beep_gap_ms = (uint32_t) id(smoke_alarm_custom_max_beep_gap_ms).state;
+              if (smoke_max_beep_gap_ms < smoke_min_beep_gap_ms) {
+                smoke_max_beep_gap_ms = smoke_min_beep_gap_ms;
+              }
+            }
 
             int smoke_samples[smoke_sample_count];
             int32_t smoke_sum = 0;
@@ -1013,8 +1151,8 @@ interval:
             }
             id(smoke_alarm_tone_score).publish_state(smoke_tone_score);
 
-            const bool tone_detected = peak >= (int) id(smoke_alarm_min_peak_adc).state &&
-                                       smoke_tone_score >= id(smoke_alarm_tone_threshold_pct).state;
+            const bool tone_detected = peak >= smoke_min_peak &&
+                                       smoke_tone_score >= smoke_tone_threshold;
 
             if (tone_detected) {
               if (!id(smoke_alarm_tone_active)) {
@@ -1028,15 +1166,15 @@ interval:
                 id(smoke_alarm_last_beep_ms) = now;
                 id(smoke_alarm_tone_active) = true;
 
-                if (id(smoke_alarm_beep_count) >= (int) id(smoke_alarm_confirm_beeps).state) {
+                if (id(smoke_alarm_beep_count) >= (int) smoke_confirm_beeps) {
                   id(smoke_alarm_state) = true;
-                  id(smoke_alarm_hold_until_ms) = now + (uint32_t) id(smoke_alarm_hold_ms_config).state;
+                  id(smoke_alarm_hold_until_ms) = now + smoke_hold_ms;
                   id(smoke_alarm_detected).publish_state(true);
                 }
               }
 
               if (id(smoke_alarm_state)) {
-                id(smoke_alarm_hold_until_ms) = now + (uint32_t) id(smoke_alarm_hold_ms_config).state;
+                id(smoke_alarm_hold_until_ms) = now + smoke_hold_ms;
               }
             } else {
               id(smoke_alarm_tone_active) = false;

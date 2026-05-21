@@ -311,10 +311,16 @@ If you are using the ESPHome trial YAML, you can also expose:
 - `Sound Calibration Status`
 - `Sound Calibration Captured Peak`
 - `Enable Smoke Alarm Sensing`
+- `Smoke Alarm Profile`
 - `Smoke Alarm Tone Threshold`
 - `Smoke Alarm Min Peak ADC`
 - `Smoke Alarm Hold`
 - `Smoke Alarm Confirm Beeps`
+- `Smoke Alarm Custom Tone 1`
+- `Smoke Alarm Custom Tone 2`
+- `Smoke Alarm Custom Tone 3`
+- `Smoke Alarm Custom Min Beep Gap`
+- `Smoke Alarm Custom Max Beep Gap`
 - `Smoke Alarm Tone Score`
 - `Smoke Alarm Beep Count`
 - `Smoke Alarm Last Beep Age`
@@ -367,10 +373,14 @@ You can now calibrate in two ways:
 For the ESPHome smoke alarm detector:
 
 - `Enable Smoke Alarm Sensing`: Turns the tone-and-cadence detector on or off.
+- `Smoke Alarm Profile`: Selects which preset tone-and-cadence profile is active.
 - `Smoke Alarm Tone Threshold`: Minimum tone score required before a beep is considered a smoke alarm tone.
 - `Smoke Alarm Min Peak ADC`: Minimum overall sound strength required before tone scoring is allowed to count.
 - `Smoke Alarm Hold`: How long `Smoke Alarm Detected` stays on after a valid alarm pattern is seen.
 - `Smoke Alarm Confirm Beeps`: How many valid beeps must be seen close together before the alarm is declared.
+- `Smoke Alarm Custom Tone 1/2/3`: The three target frequencies used only when `Smoke Alarm Profile` is set to `Custom`.
+- `Smoke Alarm Custom Min Beep Gap`: The minimum spacing between qualifying beeps when `Custom` is active.
+- `Smoke Alarm Custom Max Beep Gap`: The maximum spacing between qualifying beeps when `Custom` is active.
 - `Smoke Alarm Tone Score`: Best-effort score showing how much the captured audio resembles the target alarm frequencies.
 - `Smoke Alarm Beep Count`: How many qualifying beeps are currently in the active detection sequence.
 - `Smoke Alarm Last Beep Age`: How long it has been since the last qualifying beep was seen.
@@ -472,6 +482,15 @@ It looks for:
 - energy around common alarm frequencies near `3000-3400 Hz`
 - repeated beeps close enough together to match an alarm pattern instead of a single random chirp
 
+The detector now supports preset profiles:
+
+- `Default`: Keeps the original current behavior. It uses the existing `Smoke Alarm Tone Threshold`, `Smoke Alarm Min Peak ADC`, `Smoke Alarm Confirm Beeps`, and `Smoke Alarm Hold` values, with the original tone targets near `3000`, `3200`, and `3400 Hz` and beep spacing of about `250-2000 ms`.
+- `Generic Smoke`: A broader smoke-alarm preset aimed at common high-pitched residential alarms.
+- `Strict T3 Smoke`: A tighter smoke preset biased toward Temporal-3 style patterns.
+- `Strict T4 CO`: A preset biased toward 4-beep carbon-monoxide style patterns.
+- `Low Battery Chirp`: A single-chirp preset intended for periodic battery warnings.
+- `Custom`: Uses your manual `Smoke Alarm Tone Threshold`, `Smoke Alarm Min Peak ADC`, `Smoke Alarm Confirm Beeps`, `Smoke Alarm Hold`, and the custom tone/gap settings.
+
 This works better than plain loudness thresholding, but it is still limited by:
 
 - MAX9814 AGC behavior
@@ -484,12 +503,14 @@ Use it for automation and notifications, not as a substitute for a listed smoke 
 ### Recommended smoke alarm adjustment order
 
 1. Turn on `Enable Smoke Alarm Sensing`.
-2. Test with a real smoke alarm test tone if possible.
-3. Watch `Smoke Alarm Tone Score`, `Smoke Alarm Beep Count`, and `Smoke Alarm Last Beep Age` during the beep.
-4. Adjust `Smoke Alarm Tone Threshold` so normal room sounds stay below it and the alarm tone rises above it.
-5. Adjust `Smoke Alarm Min Peak ADC` if distant speech or short clatter still triggers the tone detector.
-6. Adjust `Smoke Alarm Confirm Beeps` if you want detection faster or slower.
-7. Adjust `Smoke Alarm Hold` last for Home Assistant behavior.
+2. Choose the closest `Smoke Alarm Profile` first.
+3. Test with a real smoke alarm test tone if possible.
+4. Watch `Smoke Alarm Tone Score`, `Smoke Alarm Beep Count`, and `Smoke Alarm Last Beep Age` during the beep.
+5. If you are on `Default` or `Custom`, adjust `Smoke Alarm Tone Threshold` so normal room sounds stay below it and the alarm tone rises above it.
+6. If you are on `Default` or `Custom`, adjust `Smoke Alarm Min Peak ADC` if distant speech or short clatter still triggers the tone detector.
+7. If you are on `Default` or `Custom`, adjust `Smoke Alarm Confirm Beeps` if you want detection faster or slower.
+8. If you are on `Custom`, tune `Smoke Alarm Custom Tone 1/2/3` and the custom beep-gap values to match your alarm.
+9. Adjust `Smoke Alarm Hold` last for Home Assistant behavior.
 
 How to read the debug sensors:
 
@@ -501,10 +522,12 @@ If `Smoke Alarm Tone Score` rises but `Smoke Alarm Beep Count` does not increase
 
 ### Smoke alarm starting points
 
-- `Smoke Alarm Tone Threshold = 18`
-- `Smoke Alarm Min Peak ADC = 250`
-- `Smoke Alarm Confirm Beeps = 3`
-- `Smoke Alarm Hold = 15000`
+- `Default`: your current settings, with factory defaults of `Tone Threshold = 18`, `Min Peak ADC = 250`, `Confirm Beeps = 3`, `Hold = 15000`, and tone targets near `3000`, `3200`, and `3400 Hz`
+- `Generic Smoke`: `Tone Threshold = 16`, `Min Peak ADC = 220`, `Confirm Beeps = 3`, `Hold = 15000`, tone targets near `2800`, `3100`, and `3400 Hz`
+- `Strict T3 Smoke`: `Tone Threshold = 18`, `Min Peak ADC = 250`, `Confirm Beeps = 3`, `Hold = 15000`, beep spacing about `700-2200 ms`
+- `Strict T4 CO`: `Tone Threshold = 20`, `Min Peak ADC = 260`, `Confirm Beeps = 4`, `Hold = 15000`, tone targets near `2600`, `2900`, and `3200 Hz`, beep spacing about `350-1500 ms`
+- `Low Battery Chirp`: `Tone Threshold = 22`, `Min Peak ADC = 180`, `Confirm Beeps = 1`, `Hold = 6000`, beep spacing about `10000-90000 ms`
+- `Custom`: start from the `Default` values, then tune the custom tone and gap settings to match your device
 
 If normal sounds falsely trigger smoke alarm detection:
 
