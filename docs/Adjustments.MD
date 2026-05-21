@@ -612,6 +612,9 @@ If your breakout uses a different color order, change the YAML substitution for 
 
 - `Status LEDs`
 - `Enable Status LEDs Auto`
+- `Status LED Left Meaning`
+- `Status LED Center Meaning`
+- `Status LED Right Meaning`
 
 ### LED roles
 
@@ -640,6 +643,7 @@ When `Enable Status LEDs Auto` is off, you can use the `Status LEDs` light entit
 
 - `Enable Status LEDs Auto` on: the firmware runs the `Auto Status Layout` effect and assigns each LED a fixed role.
 - `Enable Status LEDs Auto` off: the automatic layout stops and the `Status LEDs` entity is available for manual color/effect testing.
+- The three `Status LED ... Meaning` text sensors show what each LED is currently representing in Home Assistant, even though the LED chain is still exposed as one `Status LEDs` light entity.
 
 ### Default color map
 

@@ -99,10 +99,10 @@ views:
             entity: sensor.sentinel_comfort_index
             name: Comfort Index
           - type: tile
-            entity: text_sensor.sentinel_comfort_level
+            entity: sensor.sentinel_comfort_level
             name: Comfort Level
           - type: tile
-            entity: text_sensor.sentinel_air_quality
+            entity: sensor.sentinel_air_quality
             name: Air Quality
           - type: tile
             entity: sensor.sentinel_wifi_rssi
@@ -127,8 +127,14 @@ views:
         title: Status LEDs and Health
         show_header_toggle: false
         entities:
-          - entity: text_sensor.sentinel_device_health
+          - entity: sensor.sentinel_device_health
             name: Device Health
+          - entity: text_sensor.sentinel_status_led_left_meaning
+            name: Left LED Meaning
+          - entity: text_sensor.sentinel_status_led_center_meaning
+            name: Center LED Meaning
+          - entity: text_sensor.sentinel_status_led_right_meaning
+            name: Right LED Meaning
           - entity: light.sentinel_status_leds
             name: Status LEDs
           - entity: switch.sentinel_enable_status_leds_auto
@@ -182,7 +188,7 @@ views:
             entity: sensor.sentinel_smoke_alarm_last_beep_age
             name: Last Beep Age
           - type: tile
-            entity: text_sensor.sentinel_sound_calibration_status
+            entity: sensor.sentinel_sound_calibration_status
             name: Calibration Status
           - type: tile
             entity: sensor.sentinel_sound_calibration_captured_peak
@@ -250,7 +256,7 @@ views:
             name: Capture Quiet Baseline
           - entity: button.sentinel_capture_loud_reference
             name: Capture Loud Reference
-          - entity: text_sensor.sentinel_sound_calibration_status
+          - entity: sensor.sentinel_sound_calibration_status
             name: Calibration Status
           - entity: sensor.sentinel_sound_calibration_captured_peak
             name: Captured Peak
@@ -346,8 +352,14 @@ views:
         title: Troubleshooting Readouts
         show_header_toggle: false
         entities:
-          - entity: text_sensor.sentinel_device_health
+          - entity: sensor.sentinel_device_health
             name: Device Health
+          - entity: text_sensor.sentinel_status_led_left_meaning
+            name: Left LED Meaning
+          - entity: text_sensor.sentinel_status_led_center_meaning
+            name: Center LED Meaning
+          - entity: text_sensor.sentinel_status_led_right_meaning
+            name: Right LED Meaning
           - entity: sensor.sentinel_sound_peak_adc
             name: Sound Peak ADC
           - entity: sensor.sentinel_sound_level

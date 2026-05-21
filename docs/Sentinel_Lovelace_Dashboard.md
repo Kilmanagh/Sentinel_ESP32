@@ -60,7 +60,7 @@ Focus on:
 - `Motion`, `Door`, `Sound Intrusion`, `Smoke Alarm`
 - `Temperature`, `Humidity`, `Pressure`, `Comfort Index`, `IAQ Score`
 - `Sound Level %`, `Sound Approx dB`, `Smoke Alarm Tone Score`
-- `Device Health`, `Status LEDs`, `Enable Status LEDs Auto`
+- `Device Health`, `Status LED Left Meaning`, `Status LED Center Meaning`, `Status LED Right Meaning`, `Status LEDs`, `Enable Status LEDs Auto`
 
 ### Settings view
 
@@ -101,6 +101,9 @@ Status LED controls:
 
 - `Enable Status LEDs Auto`
 - `Status LEDs`
+- `Status LED Left Meaning`
+- `Status LED Center Meaning`
+- `Status LED Right Meaning`
 - the current `effect` attribute when you are testing patterns manually
 
 ### Troubleshooting view
@@ -110,6 +113,9 @@ Use this when a sensor seems wrong.
 Helpful readouts:
 
 - `Device Health`
+- `Status LED Left Meaning`
+- `Status LED Center Meaning`
+- `Status LED Right Meaning`
 - `Sound Peak ADC`
 - `Sound Level %`
 - `Sound Approx dB`

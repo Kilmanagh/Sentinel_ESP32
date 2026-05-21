@@ -1263,6 +1263,70 @@ text_sensor:
       return {"Healthy"};
 
   - platform: template
+    name: Status LED Left Meaning
+    id: status_led_left_meaning
+    icon: mdi:led-strip-variant
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      const uint32_t now = millis();
+      const bool booting = now < id(pir_warmup_until_ms) || id(system_uptime_s).state < 60.0f;
+      const bool low_memory = id(device_health).state == "Low Memory" || id(device_health).state == "Memory Fragmented";
+
+      if (!id(node_status).state) {
+        return {"Controller Offline"};
+      }
+      if (!id(wifi_connected_state)) {
+        return {"WiFi Reconnecting"};
+      }
+      if (booting) {
+        return {"Boot / PIR Warmup"};
+      }
+      if (low_memory) {
+        return {"Memory Warning"};
+      }
+      if (id(api_client_count) <= 0) {
+        return {"API Idle"};
+      }
+      return {"Healthy"};
+
+  - platform: template
+    name: Status LED Center Meaning
+    id: status_led_center_meaning
+    icon: mdi:led-strip-variant
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      if (id(sound_calibration_mode) == 1) {
+        return {"Quiet Calibration"};
+      }
+      if (id(sound_calibration_mode) == 2) {
+        return {"Loud Calibration"};
+      }
+      if (id(sound_intrusion_state) || id(sound_intrusion).state) {
+        return {"Sound Activity"};
+      }
+      if (id(pir_motion_state) || id(pir_motion).state) {
+        return {"Motion Activity"};
+      }
+      return {"Idle"};
+
+  - platform: template
+    name: Status LED Right Meaning
+    id: status_led_right_meaning
+    icon: mdi:led-strip-variant
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      if (id(smoke_alarm_state) || id(smoke_alarm_detected).state) {
+        return {"Smoke Alarm"};
+      }
+      if (id(device_health).state == "Sensor Trouble") {
+        return {"Sensor Trouble"};
+      }
+      return {"Idle"};
+
+  - platform: template
     name: Sound Calibration Status
     icon: mdi:tune
     update_interval: 1s
