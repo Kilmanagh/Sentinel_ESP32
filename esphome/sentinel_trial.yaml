@@ -24,7 +24,16 @@ esphome:
     then:
       - script.execute: reset_runtime_states
       - lambda: |-
+          id(boot_count) += 1;
+          id(wifi_connected_state) = false;
+          id(api_client_count) = 0;
           id(pir_warmup_until_ms) = millis() + (uint32_t) id(pir_warmup_ms).state;
+      - binary_sensor.template.publish:
+          id: wifi_connected
+          state: false
+      - binary_sensor.template.publish:
+          id: api_connected
+          state: false
 
 esp32:
   board: esp32dev
@@ -38,9 +47,27 @@ logger:
   level: INFO
 
 api:
+  on_client_connected:
+    then:
+      - lambda: |-
+          id(api_client_count) += 1;
+      - binary_sensor.template.publish:
+          id: api_connected
+          state: true
+  on_client_disconnected:
+    then:
+      - lambda: |-
+          if (id(api_client_count) > 0) {
+            id(api_client_count) -= 1;
+          }
+          id(api_disconnect_count) += 1;
+          id(api_connected).publish_state(id(api_client_count) > 0);
 
 ota:
   - platform: esphome
+
+debug:
+  update_interval: 30s
 
 web_server:
   port: 80
@@ -50,6 +77,21 @@ web_server:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  on_connect:
+    then:
+      - lambda: |-
+          id(wifi_connected_state) = true;
+      - binary_sensor.template.publish:
+          id: wifi_connected
+          state: true
+  on_disconnect:
+    then:
+      - lambda: |-
+          id(wifi_connected_state) = false;
+          id(wifi_disconnect_count) += 1;
+      - binary_sensor.template.publish:
+          id: wifi_connected
+          state: false
   # Uncomment and edit if you want a fixed LAN address.
   # manual_ip:
   #   static_ip: 192.168.1.50
@@ -73,6 +115,26 @@ i2c:
   scan: true
 
 globals:
+  - id: boot_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: wifi_connected_state
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: wifi_disconnect_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: api_client_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: api_disconnect_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
   - id: pir_enabled
     type: bool
     restore_value: yes
@@ -665,11 +727,68 @@ sensor:
 
   - platform: wifi_signal
     name: WiFi RSSI
+    id: wifi_rssi_db
     update_interval: 60s
 
   - platform: uptime
     name: Uptime
+    id: system_uptime_s
     update_interval: 60s
+
+  - platform: debug
+    free:
+      name: Heap Free
+      id: heap_free_bytes
+      unit_of_measurement: B
+      entity_category: diagnostic
+    min_free:
+      name: Heap Min Free
+      id: heap_min_free_bytes
+      unit_of_measurement: B
+      entity_category: diagnostic
+    fragmentation:
+      name: Heap Fragmentation
+      id: heap_fragmentation_pct
+      unit_of_measurement: "%"
+      entity_category: diagnostic
+    loop_time:
+      name: Main Loop Time
+      id: main_loop_time_ms
+      unit_of_measurement: ms
+      entity_category: diagnostic
+
+  - platform: template
+    name: Boot Count
+    id: boot_count_sensor
+    accuracy_decimals: 0
+    icon: mdi:counter
+    state_class: measurement
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      return (float) id(boot_count);
+
+  - platform: template
+    name: WiFi Disconnect Count
+    id: wifi_disconnect_count_sensor
+    accuracy_decimals: 0
+    icon: mdi:wifi-alert
+    state_class: measurement
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      return (float) id(wifi_disconnect_count);
+
+  - platform: template
+    name: API Disconnect Count
+    id: api_disconnect_count_sensor
+    accuracy_decimals: 0
+    icon: mdi:lan-disconnect
+    state_class: measurement
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      return (float) id(api_disconnect_count);
 
   - platform: template
     name: Sound Peak ADC
@@ -784,6 +903,16 @@ sensor:
       return (float) (millis() - id(smoke_alarm_last_beep_ms));
 
 binary_sensor:
+  - platform: template
+    name: WiFi Connected
+    id: wifi_connected
+    entity_category: diagnostic
+
+  - platform: template
+    name: API Connected
+    id: api_connected
+    entity_category: diagnostic
+
   - platform: gpio
     id: pir_raw
     internal: true
@@ -835,8 +964,48 @@ binary_sensor:
 
   - platform: status
     name: Status
+    id: node_status
 
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: Reset Reason
+      id: reset_reason_text
+      entity_category: diagnostic
+
+  - platform: template
+    name: Device Health
+    id: device_health
+    icon: mdi:heart-pulse
+    entity_category: diagnostic
+    update_interval: 15s
+    lambda: |-
+      if (id(system_uptime_s).state < 60.0f) {
+        return {"Recovering After Boot"};
+      }
+
+      if (!id(wifi_connected_state)) {
+        return {"WiFi Reconnecting"};
+      }
+
+      if (id(api_client_count) <= 0) {
+        return {"WiFi OK / API Idle"};
+      }
+
+      if (isnan(id(bme_temperature_f).state) || isnan(id(bme_humidity).state) || isnan(id(bme_pressure_hpa).state)) {
+        return {"Sensor Trouble"};
+      }
+
+      if (!isnan(id(heap_free_bytes).state) && id(heap_free_bytes).state < 20000.0f) {
+        return {"Low Memory"};
+      }
+
+      if (!isnan(id(heap_fragmentation_pct).state) && id(heap_fragmentation_pct).state > 50.0f) {
+        return {"Memory Fragmented"};
+      }
+
+      return {"Healthy"};
+
   - platform: template
     name: Sound Calibration Status
     icon: mdi:tune

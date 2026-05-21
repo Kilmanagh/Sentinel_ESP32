@@ -549,6 +549,46 @@ If the smoke alarm event stays active too long after the alarm stops:
 
 - Decrease `Smoke Alarm Hold`
 
+## Device Health
+
+The ESPHome build now also exposes node-health diagnostics so you can tell whether the device is healthy, reconnecting, or starting to struggle before the sensors look broken.
+
+### Home Assistant entities
+
+- `Device Health`
+- `Reset Reason`
+- `Boot Count`
+- `WiFi Connected`
+- `API Connected`
+- `WiFi Disconnect Count`
+- `API Disconnect Count`
+- `Heap Free`
+- `Heap Min Free`
+- `Heap Fragmentation`
+- `Main Loop Time`
+
+### What they mean
+
+- `Device Health`: A single summary state intended for dashboards and troubleshooting. It can report states such as `Recovering After Boot`, `WiFi Reconnecting`, `WiFi OK / API Idle`, `Sensor Trouble`, `Low Memory`, `Memory Fragmented`, or `Healthy`.
+- `Reset Reason`: Human-readable reason for the last reboot.
+- `Boot Count`: Number of times the node has booted.
+- `WiFi Connected`: Whether the node is currently associated with Wi-Fi.
+- `API Connected`: Whether at least one ESPHome API client is currently connected.
+- `WiFi Disconnect Count`: How many Wi-Fi disconnect events have been seen.
+- `API Disconnect Count`: How many API client disconnect events have been seen.
+- `Heap Free`: Current free heap in bytes.
+- `Heap Min Free`: Lowest free heap seen since boot.
+- `Heap Fragmentation`: Heap fragmentation percentage.
+- `Main Loop Time`: Longest recent main-loop time reported by ESPHome.
+
+### How to use them
+
+- If `Device Health` sits on `Recovering After Boot`, the node is still settling after startup.
+- If it shows `WiFi Reconnecting`, focus on signal quality, power stability, or router behavior before changing sensor thresholds.
+- If it shows `WiFi OK / API Idle`, the node is on the network but Home Assistant is not actively connected.
+- If it shows `Sensor Trouble`, check whether the BME280 values are unavailable or wiring is intermittent.
+- If it shows `Low Memory` or `Memory Fragmented`, treat that as a firmware stability warning and avoid adding more heavy features until the memory picture is understood.
+
 ### Example serial commands
 
 ```text
