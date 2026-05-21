@@ -8,6 +8,8 @@ This document provides the definitive, pin-to-pin wiring guide for the Sentinel 
 The ESP32 DevKit has limited GND and 3.3V pins. To connect all five sensors, you must create a **Shared Rail** (Bus).
 - **VCC Rail (3.3V)**: Connect the ESP32 `3V3` pin to a common rail. All sensor VCC pins must jump from this rail.
 - **Common Ground (GND)**: Connect one ESP32 `GND` pin to a common rail. All sensor GND pins must jump from this rail.
+- **Status LED Rail (5V)**: The external WS2812 status LEDs should use the ESP32 board `5V`/`VIN` rail, not the `3V3` rail.
+- **Shared Ground Rule**: The external WS2812 LED chain must share GND with the ESP32 and the sensor ground rail.
 
 ---
 
@@ -37,6 +39,12 @@ The ESP32 DevKit has limited GND and 3.3V pins. To connect all five sensors, you
 
 ### E. Status Indicator
 - **Onboard LED**: Internal to **GPIO 2**
+- **External Status LEDs**: `3 x WS2812` chained on **GPIO 25** data
+- **LED Power**: `5V` rail
+- **LED Ground**: Shared GND rail
+- **LED Data Chain**: `GPIO25 -> DIN LED 1 -> DOUT LED 1 -> DIN LED 2 -> DOUT LED 2 -> DIN LED 3`
+- **Recommended Protection**: `330-470 ohm` resistor in series with the data line near LED 1, plus `470-1000 uF` capacitor across LED `5V` and `GND`
+- **Color Order**: Default firmware assumes `GRB`
 
 ---
 
@@ -56,6 +64,12 @@ The ESP32 DevKit has limited GND and 3.3V pins. To connect all five sensors, you
 | **MAX9814** | OUT | **GPIO 34** | Analog Input (ADC1) |
 | **MC-38 Switch** | Terminal 1 | **GPIO 32** | Digital (Pull-up) |
 | **MC-38 Switch** | Terminal 2 | GND Rail | Ground |
+| **WS2812 LED Chain** | VCC | 5V Rail | Power |
+| **WS2812 LED Chain** | GND | GND Rail | Ground |
+| **WS2812 LED Chain** | DIN (LED 1) | **GPIO 25** | Addressable Data |
+| **WS2812 LED Chain** | DOUT (LED 1) | DIN (LED 2) | Data Pass-through |
+| **WS2812 LED Chain** | DOUT (LED 2) | DIN (LED 3) | Data Pass-through |
+| **Onboard LED** | Internal LED | **GPIO 2** | Digital Status |
 
 ---
 
@@ -63,6 +77,9 @@ The ESP32 DevKit has limited GND and 3.3V pins. To connect all five sensors, you
 - **I2C Bus**: Standard hardware pins for ESP32.
 - **Sound**: Uses ADC1 (GPIO 34) because ADC2 cannot be used while WiFi is active.
 - **NC Logic**: The door reports "CLOSED" when the switch is LOW (magnet present).
+- **Addressable LEDs**: All 3 external status LEDs share one GPIO data pin because WS2812 LEDs are daisy-chained and individually addressed in sequence.
+- **Power Separation**: Sensors stay on `3V3`; the external WS2812 chain uses `5V`.
+- **Grounding Requirement**: The LED chain will not work reliably unless the LED ground and ESP32 ground are tied together.
 
 ---
 *Created for Hartmann Studio Creations Project Sentinel - May 2026*
