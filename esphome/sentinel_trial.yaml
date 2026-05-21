@@ -1215,7 +1215,7 @@ interval:
             constexpr int smoke_sample_interval_us = 125;
             constexpr float smoke_sample_rate_hz = 8000.0f;
 
-            const std::string smoke_profile = id(smoke_alarm_profile).state;
+            const std::string smoke_profile = id(smoke_alarm_profile).current_option().value_or("Default");
             float smoke_target_freqs[3] = {3000.0f, 3200.0f, 3400.0f};
             float smoke_tone_threshold = id(smoke_alarm_tone_threshold_pct).state;
             int smoke_min_peak = (int) id(smoke_alarm_min_peak_adc).state;
