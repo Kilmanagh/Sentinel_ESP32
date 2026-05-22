@@ -2,11 +2,13 @@
 
 This file is the build-oriented companion to `Sentinel_ESP32_Node.kicad_sch` and `Sentinel_KiCad_Netlist.net`.
 
+This document remains the electrical reference for the Sentinel design, but the currently recommended physical build path is the existing AITRIP baseplate / expansion kit with Dupont wiring documented in `hardware/Sentinel_Baseplate_Kit_Wiring.md`.
+
 ## 1. Reference Designator BOM
 
 | RefDes | Item | Electrical Role | Suggested Footprint / Form |
 | :--- | :--- | :--- | :--- |
-| **U1** | ESP32 development board / ESP-WROOM-32 host | Main controller, power source, GPIO host | ESP32 DevKit style module or equivalent host board |
+| **U1** | AITRIP ESP-WROOM-32 / ESP-32S Type-C CH340C host board | Main controller, power source, GPIO host | 30-pin ESP32 DevKit V1 / ESP-32S style board |
 | **U2** | BME280 breakout | I2C environmental sensor | 4-pin I2C breakout |
 | **U3** | AM312 PIR module | Digital motion sensor | 3-pin module header |
 | **U4** | MAX9814 microphone module | Analog sound input | 5-pin module header |
@@ -48,6 +50,8 @@ This file is the build-oriented companion to `Sentinel_ESP32_Node.kicad_sch` and
 
 ## 3. Harness And Build Notes
 
+- The confirmed ESP32 host is a 30-pin ESP32 DevKit V1 / ESP-32S style board, not a 38-pin DevKitC layout.
+- The board headers are labeled `3V3 GND D15 D2 D4 RX2 TX2 D5 D18 D19 D21 RX0 TX0 D22 D23` on the top row and `EN VP VN D34 D35 D32 D33 D25 D26 D27 D14 D12 D13 GND VIN` on the bottom row when viewed with antenna left and USB right.
 - The external status indicator is one intact horizontal 3-LED strip in the enclosure `v2_7` layout.
 - Preserve left / center / right LED order as `D1`, `D2`, `D3` to match the enclosure window order.
 - Keep `R1` physically close to LED 1 data input.

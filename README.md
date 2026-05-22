@@ -29,6 +29,8 @@ The active implementation lives in `esphome/sentinel.yaml`. The old PlatformIO p
 
 - `docs/Adjustments.MD` - active ESPHome tuning, calibration, and sensor-behavior guide
 - `docs/Hardware_Deliverables.md` - current hardware, pin mapping, and LED wiring summary
+- `hardware/Sentinel_Baseplate_Kit_Wiring.md` - practical baseplate / Dupont wiring guide for the actual 30-pin ESP32 board and expansion kit
+- `hardware/Sentinel_Baseplate_Kit_Wiring.md` also includes a Sentinel-only pin map and a first bring-up checklist for bench validation
 - `docs/Sentinel_Home_Assistant_Helpers.md` - optional Home Assistant helper package for counters, mode helpers, and last-event tracking
 - `docs/Sentinel_Lovelace_Dashboard.md` - dashboard layout, setup, and troubleshooting view
 - `docs/Sentinel_Lovelace_Dashboard.yaml` - Lovelace YAML for the dashboard itself

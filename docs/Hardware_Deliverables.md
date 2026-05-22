@@ -4,7 +4,7 @@ This document outlines the current hardware components and wiring configuration 
 
 ## Bill of Materials (BOM)
 
-- **Microcontroller**: ESP-WROOM-32 / ESP-32S development board
+- **Microcontroller**: AITRIP ESP-WROOM-32 / ESP-32S Type-C CH340C development board, 30-pin ESP32 DevKit V1 style header layout
 - **Environmental Sensor**: BME280, 3.3V I2C
 - **Motion Sensor**: AM312 mini PIR, powered from 3.3V
 - **Acoustic Sensor**: MAX9814 microphone amplifier, analog output to GPIO 34
@@ -20,6 +20,28 @@ The active ESPHome build uses a mixed power layout:
 - Sensors use the ESP32 regulated 3.3V rail
 - The external WS2812 status LED chain uses the board 5V or VIN rail
 - All devices must share a common ground
+
+### Confirmed Dev Board Header Layout
+
+The actual board shown by the user is the common 30-pin ESP32 DevKit V1 / ESP-32S style board, not the 38-pin Espressif DevKitC layout.
+
+With the module antenna on the left and the USB Type-C connector on the right, the header labels are:
+
+- Top row, left to right: `3V3`, `GND`, `D15`, `D2`, `D4`, `RX2`, `TX2`, `D5`, `D18`, `D19`, `D21`, `RX0`, `TX0`, `D22`, `D23`
+- Bottom row, left to right: `EN`, `VP`, `VN`, `D34`, `D35`, `D32`, `D33`, `D25`, `D26`, `D27`, `D14`, `D12`, `D13`, `GND`, `VIN`
+
+For Sentinel, the important physical header locations are:
+
+- `3V3`: top row, pin 1 from the left
+- `GND`: top row, pin 2 from the left or bottom row, pin 14 from the left
+- `VIN` / 5V: bottom row, pin 15 from the left
+- `GPIO34`: bottom row, pin 4 from the left (`D34`)
+- `GPIO32`: bottom row, pin 6 from the left (`D32`)
+- `GPIO25`: bottom row, pin 8 from the left (`D25`)
+- `GPIO27`: bottom row, pin 10 from the left (`D27`)
+- `GPIO21`: top row, pin 11 from the left (`D21`)
+- `GPIO22`: top row, pin 14 from the left (`D22`)
+- `GPIO2`: top row, pin 4 from the left (`D2`)
 
 | Hardware Component | Component Pin | ESP32 GPIO / Pin | Active ESPHome Use | Pin Type |
 | :--- | :--- | :--- | :--- | :--- |
@@ -41,6 +63,22 @@ The active ESPHome build uses a mixed power layout:
 - **LED Color Order**: The current ESPHome build expects `GRB` for the WS2812 chain.
 - **Onboard LED vs External LEDs**: The node uses both the onboard GPIO 2 LED and the external 3-pixel WS2812 chain. The onboard LED is the basic ESPHome status LED, while the three external LEDs provide the main left, center, and right status display described elsewhere in the project docs.
 
+### Final Expected Connections
+
+| Sentinel function | Connect to | Power source |
+| :--- | :--- | :--- |
+| BME280 SDA | `D21` | `3.3V` |
+| BME280 SCL | `D22` | `3.3V` |
+| AM312 PIR OUT | `D27` | `3.3V` |
+| MAX9814 OUT | `D34` | `3.3V` |
+| MC-38 reed wire 1 | `D32` | none |
+| MC-38 reed wire 2 | `GND` | none |
+| WS2812 DIN | `D25` through `330-470 ohm` series resistor | n/a |
+| WS2812 power | dedicated `5V` breakout or `VIN` | `5V` |
+| WS2812 ground | `GND` | common ground |
+
+For the baseplate / expansion kit build, keep the baseplate `V` jumper set to `3.3V` so the shared `V` row remains safe for the BME280, PIR, and MAX9814. Do not power the WS2812 strip from that shared `V` row.
+
 ## Current Firmware-Relevant Hardware Notes
 
 - The active build exposes a `Door` binary sensor on GPIO 32.
@@ -51,7 +89,10 @@ The active ESPHome build uses a mixed power layout:
 ## Design And Fabrication Assets
 
 - **Wiring Reference**: `hardware/Sentinel_Wiring.md`
+- **Baseplate Build Guide**: `hardware/Sentinel_Baseplate_Kit_Wiring.md`
 - **Enclosure Notes**: `hardware/3D Enclosure/Sentinel_Enclosure.md` and `hardware/3D Enclosure/Sentinel_Enclosure_Specs.md`
 - **Schematic Notes**: `hardware/schematics/`
 - **PCB Layout Notes**: `hardware/pcb/`
 - **Manufacturing Files**: `hardware/pcb/gerbers/`
+
+The active physical build reference is the baseplate / Dupont path in `hardware/Sentinel_Baseplate_Kit_Wiring.md`. The PCB layout and gerber outputs remain experimental reference assets until the passive carrier board is fully DRC-clean.

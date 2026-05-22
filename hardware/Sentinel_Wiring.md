@@ -1,43 +1,58 @@
 # Sentinel ESP32: Complete Technical Wiring & Hardware Reference
 
+For the current hardware build, use [hardware/Sentinel_Baseplate_Kit_Wiring.md](d:/Source%20Code/ESP32/Sent/hardware/Sentinel_Baseplate_Kit_Wiring.md) as the practical assembly guide when you are wiring the AITRIP baseplate / expansion kit.
+
 This document provides the definitive, pin-to-pin wiring guide for the Sentinel Multi-Sensor Node. It accounts for all shared power/ground rails and the specific Normally Closed (NC) logic for security sensors.
 
 ---
 
 ## 1. The Common Rail Logic (Power & Ground)
-The ESP32 DevKit has limited GND and 3.3V pins. To connect all five sensors, you must create a **Shared Rail** (Bus).
+
+The ESP32 board uses shared rails for the sensor and LED wiring.
+
 - **VCC Rail (3.3V)**: Connect the ESP32 `3V3` pin to a common rail. All sensor VCC pins must jump from this rail.
 - **Common Ground (GND)**: Connect one ESP32 `GND` pin to a common rail. All sensor GND pins must jump from this rail.
 - **Status LED Rail (5V)**: The external WS2812 status LEDs should use the ESP32 board `5V`/`VIN` rail, not the `3V3` rail.
 - **Shared Ground Rule**: The external WS2812 LED chain must share GND with the ESP32 and the sensor ground rail.
+
+When using the photographed baseplate kit, the simplest safe setup is:
+
+- set the baseplate `V` jumper to `3.3V`
+- use the baseplate `V` row for the 3.3V sensors only
+- use the dedicated `5V` breakout or `VIN` for the WS2812 strip
 
 ---
 
 ## 2. Component Pin Mapping
 
 ### A. Environmental Sensor (BME280)
+
 - **VCC**: Shared 3.3V Rail
 - **GND**: Shared GND Rail
 - **SDA**: **GPIO 21**
 - **SCL**: **GPIO 22**
 
 ### B. Motion Detector (AM312 Mini PIR)
+
 - **VCC**: Shared 3.3V Rail
 - **GND**: Shared GND Rail
 - **OUT**: **GPIO 27** (Center Pin on most AM312 modules)
 
 ### C. Acoustic Sensor (MAX9814 Microphone)
+
 - **VCC**: Shared 3.3V Rail
 - **GND**: Shared GND Rail
 - **OUT**: **GPIO 34** (Analog Input)
 - **GAIN**: Leave floating for 60dB or tie to GND for 50dB.
 
 ### D. Security Sensor (MC-38 Reed Switch - Normally Closed)
+
 - **Wire 1**: **GPIO 32**
 - **Wire 2**: Shared GND Rail
 - *Note: Firmware uses `INPUT_PULLUP`. Circuit is CLOSED (LOW) when magnet is present.*
 
 ### E. Status Indicator
+
 - **Onboard LED**: Internal to **GPIO 2**
 - **External Status LEDs**: `3 x WS2812` chained on **GPIO 25** data
 - **LED Power**: `5V` rail
@@ -74,6 +89,7 @@ The ESP32 DevKit has limited GND and 3.3V pins. To connect all five sensors, you
 ---
 
 ## 4. Hardware Logic Summary
+
 - **I2C Bus**: Standard hardware pins for ESP32.
 - **Sound**: Uses ADC1 (GPIO 34) because ADC2 cannot be used while WiFi is active.
 - **NC Logic**: The door reports "CLOSED" when the switch is LOW (magnet present).
@@ -82,4 +98,22 @@ The ESP32 DevKit has limited GND and 3.3V pins. To connect all five sensors, you
 - **Grounding Requirement**: The LED chain will not work reliably unless the LED ground and ESP32 ground are tied together.
 
 ---
-*Created for Hartmann Studio Creations Project Sentinel - May 2026*
+
+## 5. Final Expected Connections
+
+| Sentinel function | Connect to | Power source |
+| :--- | :--- | :--- |
+| BME280 SDA | `D21` | `3.3V` |
+| BME280 SCL | `D22` | `3.3V` |
+| AM312 PIR OUT | `D27` | `3.3V` |
+| MAX9814 OUT | `D34` | `3.3V` |
+| MC-38 reed wire 1 | `D32` | none |
+| MC-38 reed wire 2 | `GND` | none |
+| WS2812 DIN | `D25` through `330-470 ohm` series resistor | n/a |
+| WS2812 power | dedicated `5V` breakout or `VIN` | `5V` |
+| WS2812 ground | `GND` | common ground |
+
+When using the photographed AITRIP baseplate / expansion kit, keep the baseplate `V` jumper set to `3.3V` so the shared `V` row remains safe for the BME280, PIR, and MAX9814. Do not power the WS2812 strip from that shared `V` row.
+
+---
+Created for Hartmann Studio Creations Project Sentinel - May 2026
