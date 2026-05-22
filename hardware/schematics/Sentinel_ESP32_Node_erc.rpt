@@ -1,0 +1,96 @@
+ERC report (2026-05-22T07:35:27, Encoding UTF8)
+Report includes: Errors, Warnings
+
+***** Sheet /
+[lib_symbol_mismatch]: Symbol '+3V3' doesn't match copy in library 'power'
+    ; warning
+    @(25.40 mm, 41.91 mm): Symbol #PWR04 [+3V3]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(25.40 mm, 45.72 mm): Symbol #PWR05 [GND]
+[lib_symbol_mismatch]: Symbol '+3V3' doesn't match copy in library 'power'
+    ; warning
+    @(25.40 mm, 71.12 mm): Symbol #PWR06 [+3V3]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(25.40 mm, 78.74 mm): Symbol #PWR07 [GND]
+[lib_symbol_mismatch]: Symbol '+3V3' doesn't match copy in library 'power'
+    ; warning
+    @(25.40 mm, 101.60 mm): Symbol #PWR08 [+3V3]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(25.40 mm, 109.22 mm): Symbol #PWR09 [GND]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Sentinel'
+    ; warning
+    @(45.72 mm, 45.72 mm): Symbol U2 [BME280_Module]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Sentinel'
+    ; warning
+    @(45.72 mm, 74.93 mm): Symbol U3 [AM312_PIR]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Sentinel'
+    ; warning
+    @(45.72 mm, 105.41 mm): Symbol U4 [MAX9814_Module]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Sentinel'
+    ; warning
+    @(45.72 mm, 134.62 mm): Symbol S1 [MC38_Reed_NC]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(66.04 mm, 134.62 mm): Symbol #PWR10 [GND]
+[lib_symbol_mismatch]: Symbol '+3V3' doesn't match copy in library 'power'
+    ; warning
+    @(80.01 mm, 82.55 mm): Symbol #PWR01 [+3V3]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(80.01 mm, 86.36 mm): Symbol #PWR02 [GND]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Sentinel'
+    ; warning
+    @(110.49 mm, 100.33 mm): Symbol U1 [ESP32_Controller]
+[lib_symbol_mismatch]: Symbol '+5V' doesn't match copy in library 'power'
+    ; warning
+    @(140.97 mm, 97.79 mm): Symbol #PWR03 [+5V]
+[lib_symbol_issues]: Symbol 'R_Sentinel' not found in symbol library 'Device'
+    ; warning
+    @(144.78 mm, 90.17 mm): Symbol R1 [R_Sentinel]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(154.94 mm, 97.79 mm): Symbol #PWR12 [GND]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(154.94 mm, 118.11 mm): Symbol #PWR14 [GND]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(154.94 mm, 138.43 mm): Symbol #PWR16 [GND]
+[lib_symbol_mismatch]: Symbol '+5V' doesn't match copy in library 'power'
+    ; warning
+    @(157.48 mm, 154.94 mm): Symbol #PWR17 [+5V]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Sentinel'
+    ; warning
+    @(175.26 mm, 93.98 mm): Symbol D1 [WS2812_Status]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Sentinel'
+    ; warning
+    @(175.26 mm, 114.30 mm): Symbol D2 [WS2812_Status]
+[lib_symbol_issues]: The current configuration does not include the symbol library 'Sentinel'
+    ; warning
+    @(175.26 mm, 134.62 mm): Symbol D3 [WS2812_Status]
+[lib_symbol_issues]: Symbol 'C_Polarized_Sentinel' not found in symbol library 'Device'
+    ; warning
+    @(175.26 mm, 154.94 mm): Symbol C1 [C_Polarized_Sentinel]
+[lib_symbol_mismatch]: Symbol 'GND' doesn't match copy in library 'power'
+    ; warning
+    @(193.04 mm, 154.94 mm): Symbol #PWR18 [GND]
+[lib_symbol_mismatch]: Symbol '+5V' doesn't match copy in library 'power'
+    ; warning
+    @(195.58 mm, 97.79 mm): Symbol #PWR11 [+5V]
+[lib_symbol_mismatch]: Symbol '+5V' doesn't match copy in library 'power'
+    ; warning
+    @(195.58 mm, 118.11 mm): Symbol #PWR13 [+5V]
+[lib_symbol_mismatch]: Symbol '+5V' doesn't match copy in library 'power'
+    ; warning
+    @(195.58 mm, 138.43 mm): Symbol #PWR15 [+5V]
+
+ ** ERC messages: 28  Errors 0  Warnings 28
+
+ ** Ignored checks:
+    - Global label only appears once in the schematic
+    - Four connection points are joined together
+    - SPICE model issue
+    - Assigned footprint doesn't match footprint filters

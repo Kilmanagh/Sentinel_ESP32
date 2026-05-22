@@ -1,0 +1,24 @@
+Drill report for Sentinel_Passive_Carrier.kicad_pcb
+Created on 2026-05-22T07:55:04
+
+Copper Layer Stackup:
+    =============================================================
+    L1 :  F.Cu                      front
+    L2 :  B.Cu                      back
+
+
+Drill file 'Sentinel_Passive_Carrier.drl' contains
+    plated through holes:
+    =============================================================
+    T1  0.900mm  0.0354"  (2 holes))
+    T2  1.000mm  0.0394"  (25 holes))
+    T3  1.200mm  0.0472"  (3 holes))
+
+    Total plated holes count 30
+
+
+Not plated through holes are merged with plated holes
+    unplated through holes:
+    =============================================================
+
+    Total unplated holes count 0

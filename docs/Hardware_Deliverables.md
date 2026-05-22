@@ -2,7 +2,6 @@
 
 This document outlines the current hardware components and wiring configuration for the active ESPHome-based Sentinel ESP32 node.
 
-
 ## Bill of Materials (BOM)
 
 - **Microcontroller**: ESP-WROOM-32 / ESP-32S development board
@@ -52,7 +51,7 @@ The active ESPHome build uses a mixed power layout:
 ## Design And Fabrication Assets
 
 - **Wiring Reference**: `hardware/Sentinel_Wiring.md`
-- **Enclosure Notes**: `hardware/Sentinel_Enclosure.md` and `hardware/Sentinel_Enclosure_Specs.md`
+- **Enclosure Notes**: `hardware/3D Enclosure/Sentinel_Enclosure.md` and `hardware/3D Enclosure/Sentinel_Enclosure_Specs.md`
 - **Schematic Notes**: `hardware/schematics/`
 - **PCB Layout Notes**: `hardware/pcb/`
 - **Manufacturing Files**: `hardware/pcb/gerbers/`

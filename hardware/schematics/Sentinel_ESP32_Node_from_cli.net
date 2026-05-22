@@ -1,0 +1,1273 @@
+(export
+	(version "E")
+	(design
+		(source "D:\\Source Code\\ESP32\\Sent\\hardware\\schematics\\Sentinel_ESP32_Node.kicad_sch")
+		(date "2026-05-22T07:31:49")
+		(tool "Eeschema 10.0.2")
+		(sheet
+			(number "1")
+			(name "/")
+			(tstamps "/")
+			(title_block
+				(title "Sentinel ESP32 Multi-Sensor Node")
+				(company "Hartmann Studio Creations")
+				(rev "2.2")
+				(date)
+				(source "Sentinel_ESP32_Node.kicad_sch")
+				(comment
+					(number "1")
+					(value "Source scaffold aligned to the May 2026 hardware refresh")
+				)
+				(comment
+					(number "2")
+					(value "Sensors on 3V3, WS2812 chain on 5V/VIN, shared ground")
+				)
+				(comment
+					(number "3")
+					(value "Use together with Sentinel_KiCad_Netlist.net, Sentinel_ESP32_Node_Schematic.md, and Sentinel_Schematic_BOM.md")
+				)
+				(comment
+					(number "4")
+					(value "")
+				)
+				(comment
+					(number "5")
+					(value "")
+				)
+				(comment
+					(number "6")
+					(value "")
+				)
+				(comment
+					(number "7")
+					(value "")
+				)
+				(comment
+					(number "8")
+					(value "")
+				)
+				(comment
+					(number "9")
+					(value "")
+				)
+			)
+		)
+	)
+	(components
+		(comp
+			(ref "C1")
+			(value "470uF")
+			(description "Bulk capacitor across LED supply")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Bulk capacitor across LED supply")
+			)
+			(libsource
+				(lib "Device")
+				(part "C_Polarized_Sentinel")
+				(description "Bulk capacitor between LED 5V and GND")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-00000000000a")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "D1")
+			(value "WS2812_Left")
+			(description "Left status LED stage")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Left status LED stage")
+			)
+			(libsource
+				(lib "Sentinel")
+				(part "WS2812_Status")
+				(description "WS2812 status LED stage")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000007")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "3")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "4")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "D2")
+			(value "WS2812_Center")
+			(description "Center status LED stage")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Center status LED stage")
+			)
+			(libsource
+				(lib "Sentinel")
+				(part "WS2812_Status")
+				(description "WS2812 status LED stage")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000008")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "3")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "4")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "D3")
+			(value "WS2812_Right")
+			(description "Right status LED stage")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Right status LED stage")
+			)
+			(libsource
+				(lib "Sentinel")
+				(part "WS2812_Status")
+				(description "WS2812 status LED stage")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000009")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "3")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "4")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "R1")
+			(value "330R")
+			(description "Series resistor for WS2812 data input")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Series resistor for WS2812 data input")
+			)
+			(libsource
+				(lib "Device")
+				(part "R_Sentinel")
+				(description "Series resistor")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000006")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "S1")
+			(value "MC38_Reed_NC")
+			(description "Normally closed magnetic reed switch")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Normally closed magnetic reed switch")
+			)
+			(libsource
+				(lib "Sentinel")
+				(part "MC38_Reed_NC")
+				(description "Normally closed magnetic reed switch")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000005")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "U1")
+			(value "ESP32_Controller")
+			(description "ESP32 host controller block for the Sentinel node")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "ESP32 host controller block for the Sentinel node")
+			)
+			(libsource
+				(lib "Sentinel")
+				(part "ESP32_Controller")
+				(description "ESP32 host controller block for the Sentinel node")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000001")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "3")
+						)
+						(pin
+							(num "4")
+						)
+						(pin
+							(num "5")
+						)
+						(pin
+							(num "6")
+						)
+						(pin
+							(num "7")
+						)
+						(pin
+							(num "8")
+						)
+						(pin
+							(num "9")
+						)
+						(pin
+							(num "10")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "U2")
+			(value "BME280_Module")
+			(description "BME280 environmental sensor breakout")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "BME280 environmental sensor breakout")
+			)
+			(libsource
+				(lib "Sentinel")
+				(part "BME280_Module")
+				(description "BME280 environmental sensor breakout")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000002")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "3")
+						)
+						(pin
+							(num "4")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "U3")
+			(value "AM312_PIR")
+			(description "AM312 PIR module")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "AM312 PIR module")
+			)
+			(libsource
+				(lib "Sentinel")
+				(part "AM312_PIR")
+				(description "AM312 PIR module")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000003")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "3")
+						)
+					)
+				)
+			)
+		)
+		(comp
+			(ref "U4")
+			(value "MAX9814_Module")
+			(description "MAX9814 microphone amplifier module")
+			(fields
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "MAX9814 microphone amplifier module")
+			)
+			(libsource
+				(lib "Sentinel")
+				(part "MAX9814_Module")
+				(description "MAX9814 microphone amplifier module")
+			)
+			(property
+				(name "Sheetname")
+				(value "")
+			)
+			(property
+				(name "Sheetfile")
+				(value "hardware/schematics/Sentinel_ESP32_Node.kicad_sch")
+			)
+			(sheetpath
+				(names "/")
+				(tstamps "/")
+			)
+			(tstamps "20000000-0000-4000-8000-000000000004")
+			(units
+				(unit
+					(name "A")
+					(pins
+						(pin
+							(num "1")
+						)
+						(pin
+							(num "2")
+						)
+						(pin
+							(num "3")
+						)
+					)
+				)
+			)
+		)
+	)
+	(groups)
+	(variants)
+	(libparts
+		(libpart
+			(lib "Device")
+			(part "C_Polarized_Sentinel")
+			(description "Bulk capacitor between LED 5V and GND")
+			(fields
+				(field
+					(name "Reference") "C")
+				(field
+					(name "Value") "C")
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Bulk capacitor between LED 5V and GND")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "+")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "-")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "Device")
+			(part "R_Sentinel")
+			(description "Series resistor")
+			(fields
+				(field
+					(name "Reference") "R")
+				(field
+					(name "Value") "R")
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Series resistor")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "Sentinel")
+			(part "AM312_PIR")
+			(description "AM312 PIR module")
+			(fields
+				(field
+					(name "Reference") "U")
+				(field
+					(name "Value") "AM312_PIR")
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "AM312 PIR module")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "VCC")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "GND")
+					(type "passive")
+				)
+				(pin
+					(num "3")
+					(name "OUT")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "Sentinel")
+			(part "BME280_Module")
+			(description "BME280 environmental sensor breakout")
+			(fields
+				(field
+					(name "Reference") "U")
+				(field
+					(name "Value") "BME280_Module")
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "BME280 environmental sensor breakout")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "VCC")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "GND")
+					(type "passive")
+				)
+				(pin
+					(num "3")
+					(name "SDA")
+					(type "passive")
+				)
+				(pin
+					(num "4")
+					(name "SCL")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "Sentinel")
+			(part "ESP32_Controller")
+			(description "ESP32 host controller block for the Sentinel node")
+			(fields
+				(field
+					(name "Reference") "U")
+				(field
+					(name "Value") "ESP32_Controller")
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "ESP32 host controller block for the Sentinel node")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "3V3")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "GND")
+					(type "passive")
+				)
+				(pin
+					(num "3")
+					(name "GPIO21")
+					(type "passive")
+				)
+				(pin
+					(num "4")
+					(name "GPIO22")
+					(type "passive")
+				)
+				(pin
+					(num "5")
+					(name "GPIO27")
+					(type "passive")
+				)
+				(pin
+					(num "6")
+					(name "GPIO32")
+					(type "passive")
+				)
+				(pin
+					(num "7")
+					(name "GPIO34")
+					(type "passive")
+				)
+				(pin
+					(num "8")
+					(name "GPIO25")
+					(type "passive")
+				)
+				(pin
+					(num "9")
+					(name "GPIO2")
+					(type "passive")
+				)
+				(pin
+					(num "10")
+					(name "5V/VIN")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "Sentinel")
+			(part "MAX9814_Module")
+			(description "MAX9814 microphone amplifier module")
+			(fields
+				(field
+					(name "Reference") "U")
+				(field
+					(name "Value") "MAX9814_Module")
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "MAX9814 microphone amplifier module")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "VCC")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "GND")
+					(type "passive")
+				)
+				(pin
+					(num "3")
+					(name "OUT")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "Sentinel")
+			(part "MC38_Reed_NC")
+			(description "Normally closed magnetic reed switch")
+			(fields
+				(field
+					(name "Reference") "S")
+				(field
+					(name "Value") "MC38_Reed_NC")
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "Normally closed magnetic reed switch")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "SIG")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "GND")
+					(type "passive")
+				)
+			)
+		)
+		(libpart
+			(lib "Sentinel")
+			(part "WS2812_Status")
+			(description "WS2812 status LED stage")
+			(fields
+				(field
+					(name "Reference") "D")
+				(field
+					(name "Value") "WS2812_Status")
+				(field
+					(name "Footprint")
+				)
+				(field
+					(name "Datasheet")
+				)
+				(field
+					(name "Description") "WS2812 status LED stage")
+			)
+			(pins
+				(pin
+					(num "1")
+					(name "DIN")
+					(type "passive")
+				)
+				(pin
+					(num "2")
+					(name "DOUT")
+					(type "passive")
+				)
+				(pin
+					(num "3")
+					(name "GND")
+					(type "passive")
+				)
+				(pin
+					(num "4")
+					(name "VDD")
+					(type "passive")
+				)
+			)
+		)
+	)
+	(libraries
+		(library
+			(logical "Device")
+			(uri "${KICAD10_SYMBOL_DIR}/Device.kicad_sym")
+		)
+	)
+	(nets
+		(net
+			(code "1")
+			(name "/GPIO2_ONBOARD_LED")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "9")
+				(pinfunction "GPIO2_9")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "2")
+			(name "/I2C_SCL")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "4")
+				(pinfunction "GPIO22_4")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "4")
+				(pinfunction "SCL_4")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "3")
+			(name "/I2C_SDA")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "3")
+				(pinfunction "GPIO21_3")
+				(pintype "passive")
+			)
+			(node
+				(ref "U2")
+				(pin "3")
+				(pinfunction "SDA_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "4")
+			(name "/LED1_TO_LED2")
+			(class "Default")
+			(node
+				(ref "D1")
+				(pin "2")
+				(pinfunction "DOUT_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "D2")
+				(pin "1")
+				(pinfunction "DIN_1")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "5")
+			(name "/LED2_TO_LED3")
+			(class "Default")
+			(node
+				(ref "D2")
+				(pin "2")
+				(pinfunction "DOUT_2")
+				(pintype "passive")
+			)
+			(node
+				(ref "D3")
+				(pin "1")
+				(pinfunction "DIN_1")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "6")
+			(name "/LED_CHAIN_END")
+			(class "Default")
+			(node
+				(ref "D3")
+				(pin "2")
+				(pinfunction "DOUT_2")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "8")
+			(name "/MIC_ANALOG")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "7")
+				(pinfunction "GPIO34_7")
+				(pintype "passive")
+			)
+			(node
+				(ref "U4")
+				(pin "3")
+				(pinfunction "OUT_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "9")
+			(name "/PIR_DATA")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "5")
+				(pinfunction "GPIO27_5")
+				(pintype "passive")
+			)
+			(node
+				(ref "U3")
+				(pin "3")
+				(pinfunction "OUT_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "10")
+			(name "/REED_SIGNAL")
+			(class "Default")
+			(node
+				(ref "S1")
+				(pin "1")
+				(pinfunction "SIG_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "6")
+				(pinfunction "GPIO32_6")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "11")
+			(name "Net-(C1-+)")
+			(class "Default")
+			(node
+				(ref "C1")
+				(pin "1")
+				(pinfunction "+_1")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "12")
+			(name "Net-(C1--)")
+			(class "Default")
+			(node
+				(ref "C1")
+				(pin "2")
+				(pinfunction "-_2")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "13")
+			(name "Net-(D1-DIN)")
+			(class "Default")
+			(node
+				(ref "D1")
+				(pin "1")
+				(pinfunction "DIN_1")
+				(pintype "passive")
+			)
+			(node
+				(ref "R1")
+				(pin "2")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "14")
+			(name "Net-(D1-GND)")
+			(class "Default")
+			(node
+				(ref "D1")
+				(pin "3")
+				(pinfunction "GND_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "15")
+			(name "Net-(D1-VDD)")
+			(class "Default")
+			(node
+				(ref "D1")
+				(pin "4")
+				(pinfunction "VDD_4")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "16")
+			(name "Net-(D2-GND)")
+			(class "Default")
+			(node
+				(ref "D2")
+				(pin "3")
+				(pinfunction "GND_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "17")
+			(name "Net-(D2-VDD)")
+			(class "Default")
+			(node
+				(ref "D2")
+				(pin "4")
+				(pinfunction "VDD_4")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "18")
+			(name "Net-(D3-GND)")
+			(class "Default")
+			(node
+				(ref "D3")
+				(pin "3")
+				(pinfunction "GND_3")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "19")
+			(name "Net-(D3-VDD)")
+			(class "Default")
+			(node
+				(ref "D3")
+				(pin "4")
+				(pinfunction "VDD_4")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "20")
+			(name "Net-(S1-GND)")
+			(class "Default")
+			(node
+				(ref "S1")
+				(pin "2")
+				(pinfunction "GND_2")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "21")
+			(name "Net-(U1-3V3)")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "1")
+				(pinfunction "3V3_1")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "22")
+			(name "Net-(U1-5V{slash}VIN)")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "10")
+				(pinfunction "5V/VIN_10")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "23")
+			(name "Net-(U1-GND)")
+			(class "Default")
+			(node
+				(ref "U1")
+				(pin "2")
+				(pinfunction "GND_2")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "24")
+			(name "Net-(U1-GPIO25)")
+			(class "Default")
+			(node
+				(ref "R1")
+				(pin "1")
+				(pintype "passive")
+			)
+			(node
+				(ref "U1")
+				(pin "8")
+				(pinfunction "GPIO25_8")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "25")
+			(name "Net-(U2-GND)")
+			(class "Default")
+			(node
+				(ref "U2")
+				(pin "2")
+				(pinfunction "GND_2")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "26")
+			(name "Net-(U2-VCC)")
+			(class "Default")
+			(node
+				(ref "U2")
+				(pin "1")
+				(pinfunction "VCC_1")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "27")
+			(name "Net-(U3-GND)")
+			(class "Default")
+			(node
+				(ref "U3")
+				(pin "2")
+				(pinfunction "GND_2")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "28")
+			(name "Net-(U3-VCC)")
+			(class "Default")
+			(node
+				(ref "U3")
+				(pin "1")
+				(pinfunction "VCC_1")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "29")
+			(name "Net-(U4-GND)")
+			(class "Default")
+			(node
+				(ref "U4")
+				(pin "2")
+				(pinfunction "GND_2")
+				(pintype "passive")
+			)
+		)
+		(net
+			(code "30")
+			(name "Net-(U4-VCC)")
+			(class "Default")
+			(node
+				(ref "U4")
+				(pin "1")
+				(pinfunction "VCC_1")
+				(pintype "passive")
+			)
+		)
+	)
+)

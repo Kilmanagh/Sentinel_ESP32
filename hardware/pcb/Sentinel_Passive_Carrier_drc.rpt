@@ -1,0 +1,93 @@
+** Drc report for Sentinel_Passive_Carrier.kicad_pcb **
+** Created on 2026-05-22T07:54:24 **
+** Report includes: Errors, Warnings **
+
+** Found 19 DRC violations **
+[tracks_crossing]: Tracks crossing
+    Local override; error
+    @(10.0000 mm, 38.0000 mm): Track [5V_LED] on B.Cu, length 48.0000 mm
+    @(34.0000 mm, 46.0000 mm): Track [GND] on B.Cu, length 16.0000 mm
+[tracks_crossing]: Tracks crossing
+    Local override; error
+    @(10.0000 mm, 38.0000 mm): Track [5V_LED] on B.Cu, length 48.0000 mm
+    @(56.0000 mm, 46.0000 mm): Track [GND] on B.Cu, length 36.0000 mm
+[tracks_crossing]: Tracks crossing
+    Local override; error
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+    @(34.0000 mm, 29.0500 mm): Track [PIR_DATA] on F.Cu, length 8.0500 mm
+[tracks_crossing]: Tracks crossing
+    Local override; error
+    @(10.0000 mm, 38.0000 mm): Track [5V_LED] on B.Cu, length 48.0000 mm
+    @(52.0000 mm, 46.0000 mm): Track [GND] on B.Cu, length 26.0000 mm
+[tracks_crossing]: Tracks crossing
+    Local override; error
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+    @(43.6200 mm, 31.0000 mm): Track [MIC_ANALOG] on F.Cu, length 3.0000 mm
+[shorting_items]: Items shorting two nets (nets REED_SIGNAL and MIC_GAIN)
+    Local override; error
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+    @(47.4300 mm, 28.0000 mm): PTH pad 4 [MIC_GAIN] of J4
+[shorting_items]: Items shorting two nets (nets PIR_DATA and REED_SIGNAL)
+    Local override; error
+    @(8.0000 mm, 29.0500 mm): Track [PIR_DATA] on F.Cu, length 26.0000 mm
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+[tracks_crossing]: Tracks crossing
+    Local override; error
+    @(10.0000 mm, 38.0000 mm): Track [5V_LED] on B.Cu, length 48.0000 mm
+    @(16.0000 mm, 13.8100 mm): Track [GND] on B.Cu, length 32.1900 mm
+[clearance]: Clearance violation ( clearance 0.2000 mm; actual 0.1522 mm)
+    Local override; error
+    @(31.6200 mm, 40.4800 mm): Track [LED_DATA_IN] on F.Cu, length 3.2800 mm
+    @(32.0000 mm, 36.6700 mm): Track [MIC_ANALOG] on F.Cu, length 5.6700 mm
+[clearance]: Clearance violation ( clearance 0.2000 mm; actual 0.0300 mm)
+    Local override; error
+    @(8.0000 mm, 36.6700 mm): Track [MIC_ANALOG] on F.Cu, length 24.0000 mm
+    @(31.6200 mm, 40.4800 mm): Track [LED_DATA_IN] on F.Cu, length 3.2800 mm
+[clearance]: Clearance violation ( clearance 0.2000 mm; actual 0.0300 mm)
+    Local override; error
+    @(8.0000 mm, 36.6700 mm): Track [MIC_ANALOG] on F.Cu, length 24.0000 mm
+    @(31.6200 mm, 37.2000 mm): Track [LED_DATA_IN] on F.Cu, length 15.3800 mm
+[tracks_crossing]: Tracks crossing
+    Local override; error
+    @(8.0000 mm, 29.0500 mm): Track [PIR_DATA] on F.Cu, length 26.0000 mm
+    @(10.0000 mm, 32.8600 mm): Track [REED_SIGNAL] on F.Cu, length 3.8600 mm
+[solder_mask_bridge]: Rear solder mask aperture bridges items with different nets
+    Rule: board setup solder mask min width; error
+    @(52.0000 mm, 46.0000 mm): Track [GND] on B.Cu, length 26.0000 mm
+    @(51.2400 mm, 28.0000 mm): PTH pad 5 [MIC_AR] of J4
+[solder_mask_bridge]: Front solder mask aperture bridges items with different nets
+    Rule: board setup solder mask min width; error
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+    @(36.0000 mm, 28.0000 mm): PTH pad 1 [3V3] of J4
+[solder_mask_bridge]: Front solder mask aperture bridges items with different nets
+    Rule: board setup solder mask min width; error
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+    @(39.8100 mm, 28.0000 mm): PTH pad 2 [GND] of J4
+[solder_mask_bridge]: Front solder mask aperture bridges items with different nets
+    Rule: board setup solder mask min width; error
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+    @(43.6200 mm, 28.0000 mm): PTH pad 3 [MIC_ANALOG] of J4
+[solder_mask_bridge]: Front solder mask aperture bridges items with different nets
+    Rule: board setup solder mask min width; error
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+    @(47.4300 mm, 28.0000 mm): PTH pad 4 [MIC_GAIN] of J4
+[solder_mask_bridge]: Front solder mask aperture bridges items with different nets
+    Rule: board setup solder mask min width; error
+    @(10.0000 mm, 29.0000 mm): Track [REED_SIGNAL] on F.Cu, length 44.0000 mm
+    @(51.2400 mm, 28.0000 mm): PTH pad 5 [MIC_AR] of J4
+[track_dangling]: Track has unconnected end
+    Local override; warning
+    @(63.0800 mm, 45.0000 mm): Track [GND] on B.Cu, length 13.0000 mm
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** Ignored checks **
+    - Footprint has no courtyard defined
+    - Track endpoint not centered on via
+    - Tuning profile track geometries
+    - Footprint doesn't match symbol's footprint filters
+    - Footprint component type doesn't match footprint pads
+
+** End of Report **
